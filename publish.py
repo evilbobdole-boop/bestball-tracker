@@ -49,10 +49,8 @@ def ordinal(n):
     return f"{n}{s[n % 100 if 11 <= n % 100 <= 13 else n % 10]}"
 
 def load_stats(wb):
-    batting        = {}   # (week, name, team) -> total dk pts
-    pitching       = {}   # (week, name, team) -> total dk pts
-    batting_daily  = {}   # (date_str, name, team) -> dk pts
-    pitching_daily = {}   # (date_str, name, team) -> dk pts
+    batting  = {}
+    pitching = {}
 
     ds = wb["Daily Stats"]
     # Use sheet max_row but also read all rows regardless of gaps
@@ -69,10 +67,6 @@ def load_stats(wb):
             if week < 1: continue
             key  = (week, name, team)
             batting[key] = batting.get(key, 0.0) + dk
-            # Daily tracking
-            date_str = str(row[0])[:10]
-            dkey = (date_str, name, team)
-            batting_daily[dkey] = batting_daily.get(dkey, 0.0) + dk
         except (TypeError, ValueError):
             continue
 
@@ -89,13 +83,10 @@ def load_stats(wb):
             if week < 1: continue
             key  = (week, name, team)
             pitching[key] = pitching.get(key, 0.0) + dk
-            date_str = str(row[0])[:10]
-            dkey = (date_str, name, team)
-            pitching_daily[dkey] = pitching_daily.get(dkey, 0.0) + dk
         except (TypeError, ValueError):
             continue
 
-    return batting, pitching, batting_daily, pitching_daily
+    return batting, pitching
 
 def player_score(name, mlb, pos, week, batting, pitching):
     name = strip_accents(str(name).strip())
@@ -116,27 +107,7 @@ def team_week_score(roster, team_name, week, batting, pitching):
         total += sum(scores[:3])
     return round(total, 2)
 
-
-def team_day_score(roster, team_name, date_str, batting_daily, pitching_daily):
-    """Top-3 P + top-3 IF + top-3 OF for a single day."""
-    by_pos = {"P": [], "IF": [], "OF": []}
-    for p in roster:
-        if p["team_name"] != team_name or p["pos"] not in by_pos: continue
-        name = strip_accents(str(p["name"]).strip())
-        team = str(p["mlb"]).strip().upper().replace("AZ","ARI")
-        key  = (date_str, name, team)
-        if p["pos"] == "P":
-            s = pitching_daily.get(key, 0.0)
-        else:
-            s = batting_daily.get(key, 0.0)
-        by_pos[p["pos"]].append(s)
-    total = 0.0
-    for scores in by_pos.values():
-        scores.sort(reverse=True)
-        total += sum(scores[:3])
-    return round(total, 2)
-
-def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest_date, num_weeks):
+def load_all_drafts(wb, batting, pitching, num_weeks):
     drafts = []
     for sheet_name in wb.sheetnames:
         if not sheet_name.startswith("draftboard_"): continue
@@ -180,20 +151,6 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
         my_rank  = ranked.index(MY_TEAM) + 1 if MY_TEAM in ranked else None
         my_pts   = team_data.get(MY_TEAM, {}).get("total", 0.0)
 
-        # Daily scores for latest date
-        daily_scores = {}
-        if latest_date:
-            for team in teams:
-                daily_scores[team] = team_day_score(roster, team, latest_date, batting_daily, pitching_daily)
-        daily_ranked = sorted(teams, key=lambda t: daily_scores.get(t, 0.0), reverse=True)
-        my_daily     = daily_scores.get(MY_TEAM, 0.0)
-        # Daily gap: my daily pts vs 2nd place daily pts
-        if len(daily_ranked) > 1:
-            d2nd_team  = daily_ranked[1] if daily_ranked[0] == MY_TEAM else daily_ranked[0] if daily_ranked[1] == MY_TEAM else daily_ranked[1]
-            my_daily_gap = round(my_daily - daily_scores.get(daily_ranked[1] if daily_ranked[0]==MY_TEAM else daily_ranked[0], 0.0), 2)
-        else:
-            my_daily_gap = 0.0
-
         # evilbobdole per-player scores
         pos_order = {"IF": 0, "OF": 1, "P": 2}
         my_players = []
@@ -202,23 +159,18 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             weeks = [round(player_score(p["name"], p["mlb"], p["pos"], w, batting, pitching), 2)
                      for w in range(1, num_weeks + 1)]
             my_players.append({**p, "weeks": weeks, "total": round(sum(weeks), 2)})
-        # Sort by current week score descending (best performers first)
-        my_players.sort(key=lambda x: x["weeks"][-1] if x["weeks"] else 0, reverse=True)
+        my_players.sort(key=lambda x: (pos_order.get(x["pos"], 9), x["name"]))
 
         drafts.append({
-            "num":          num,
-            "sheet":        sheet_name,
-            "roster":       roster,
-            "teams":        teams,
-            "data":         team_data,
-            "ranked":       ranked,
-            "my_rank":      my_rank,
-            "my_pts":       my_pts,
-            "my_players":   my_players,
-            "daily_scores": daily_scores,
-            "my_daily":     my_daily,
-            "my_daily_gap": my_daily_gap,
-            "latest_date":  latest_date,
+            "num":        num,
+            "sheet":      sheet_name,
+            "roster":     roster,
+            "teams":      teams,
+            "data":       team_data,
+            "ranked":     ranked,
+            "my_rank":    my_rank,
+            "my_pts":     my_pts,
+            "my_players": my_players,
         })
 
     drafts.sort(key=lambda d: d["num"])
@@ -347,13 +299,11 @@ tr:hover td { background: #F7F9FC; }
 
 def build_html(drafts, num_weeks, generated_at):
     # Aggregate stats
-    my_drafts    = [d for d in drafts if MY_TEAM in d["teams"]]
-    top2         = sum(1 for d in my_drafts if d["my_rank"] and d["my_rank"] <= 2)
-    # Leader stats across all drafts
-    leader_pts   = [d["data"].get(d["ranked"][0], {}).get("total", 0.0) for d in drafts if d["ranked"]]
-    avg_leader   = sum(leader_pts) / max(len(leader_pts), 1)
-    high_leader  = max(leader_pts) if leader_pts else 0.0
-    low_leader   = min(leader_pts) if leader_pts else 0.0
+    my_drafts  = [d for d in drafts if MY_TEAM in d["teams"]]
+    total_pts  = sum(d["my_pts"] for d in my_drafts)
+    wins       = sum(1 for d in my_drafts if d["my_rank"] == 1)
+    top3       = sum(1 for d in my_drafts if d["my_rank"] and d["my_rank"] <= 3)
+    avg_rank   = sum(d["my_rank"] for d in my_drafts if d["my_rank"]) / max(len(my_drafts), 1)
 
     wk_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
 
@@ -366,28 +316,22 @@ def build_html(drafts, num_weeks, generated_at):
     for d in sorted(drafts, key=lambda d: d["my_pts"], reverse=True):
         rank     = d["my_rank"]
         my_pts   = d["my_pts"]
-        # 2nd place
-        second       = d["ranked"][1] if len(d["ranked"]) > 1 else d["ranked"][0] if d["ranked"] else None
-        second_pts   = d["data"].get(second, {}).get("total", 0.0) if second else 0.0
-        # Gap to 2nd (if I'm 1st, gap to 2nd; if I'm not 1st, gap to whoever is 2nd)
-        if rank == 1:
-            gap = round(my_pts - second_pts, 2)
-        else:
-            gap = round(my_pts - second_pts, 2)
-        gap_str  = (f'<span style="color:#1a7a1a;font-weight:bold">+{gap:.2f}</span>' if gap > 0
-                    else f'<span style="color:#b00;font-weight:bold">{gap:.2f}</span>' if gap < 0
+        leader   = d["ranked"][0] if d["ranked"] else "—"
+        ldr_pts  = d["data"].get(leader, {}).get("total", 0.0)
+        diff     = round(my_pts - ldr_pts, 2)
+        diff_str = (f'<span style="color:#1a7a1a">+{diff:.2f}</span>' if diff > 0
+                    else f'<span style="color:#b00">{diff:.2f}</span>' if diff < 0
                     else "0.00")
-        # Pass/fail = top 2
-        result   = '<span style="color:#1a7a1a;font-weight:bold">✓ PASS</span>' if rank and rank <= 2 else '<span style="color:#b00">✗</span>'
+        r_cls    = f"r{rank}" if rank in (1,2,3) else ""
         me_cls   = "my-row" if MY_TEAM in d["teams"] else ""
         sum_rows += f"""
         <tr class="{me_cls}">
           <td><a href="#d{d['num']}">Draft {d['num']}</a></td>
           <td class="num">{my_pts:.2f}</td>
-          <td class="rank-cell">{ordinal(rank)}</td>
-          <td class="num">{second_pts:.2f}</td>
-          <td class="num">{gap_str}</td>
-          <td style="text-align:center">{result}</td>
+          <td class="rank-cell {r_cls}">{ordinal(rank)}</td>
+          <td>{leader}</td>
+          <td class="num">{ldr_pts:.2f}</td>
+          <td class="num">{diff_str}</td>
         </tr>"""
 
     summary = f"""
@@ -396,7 +340,7 @@ def build_html(drafts, num_weeks, generated_at):
       <table>
         <thead>
           <tr><th>Draft</th><th>My Points</th><th>Rank</th>
-              <th>2nd Place Pts</th><th>Gap to 2nd</th><th>Result</th></tr>
+              <th>Leader</th><th>Leader Pts</th><th>Gap</th></tr>
         </thead>
         <tbody>{sum_rows}</tbody>
       </table>
@@ -447,17 +391,8 @@ def build_html(drafts, num_weeks, generated_at):
               </table>
             </div>"""
 
-        if MY_TEAM in d["teams"]:
-            daily_val  = d.get("my_daily", 0.0)
-            daily_gap  = d.get("my_daily_gap", 0.0)
-            date_lbl   = d.get("latest_date", "")
-            gap_color  = "#90EE90" if daily_gap >= 0 else "#FF9999"
-            gap_sign   = "+" if daily_gap >= 0 else ""
-            badge = (f'<span class="badge">{MY_TEAM}: {d["my_pts"]:.2f} pts &nbsp;|&nbsp; {ordinal(d["my_rank"])}</span>'
-                     f'<span style="background:#333;color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;margin-left:6px;">' 
-                     f'{date_lbl}: {daily_val:.2f} pts &nbsp;|&nbsp; <span style="color:{gap_color}">{gap_sign}{daily_gap:.2f} vs 2nd</span></span>')
-        else:
-            badge = ""
+        badge = (f'<span class="badge">{MY_TEAM}: {d["my_pts"]:.2f} pts &nbsp;|&nbsp; {ordinal(d["my_rank"])}</span>'
+                 if MY_TEAM in d["teams"] else "")
         back_link = '<a href="#summary" style="color:#aac;font-size:11px;text-decoration:none;">▲ Back to Leaderboard</a>'
 
         draft_cards += f"""
@@ -477,10 +412,11 @@ def build_html(drafts, num_weeks, generated_at):
     # ── FULL PAGE ──
     pills = f"""
     <div class="pills">
-      <div class="pill"><div class="val">{top2}</div><div class="lbl">Top-2 Finishes</div></div>
-      <div class="pill"><div class="val">{avg_leader:.2f}</div><div class="lbl">Avg Leader Score</div></div>
-      <div class="pill"><div class="val">{high_leader:.2f}</div><div class="lbl">High Leader Score</div></div>
-      <div class="pill"><div class="val">{low_leader:.2f}</div><div class="lbl">Low Leader Score</div></div>
+      <div class="pill"><div class="val">{total_pts:,.2f}</div><div class="lbl">Total Points</div></div>
+      <div class="pill"><div class="val">{wins}</div><div class="lbl">Draft Wins</div></div>
+      <div class="pill"><div class="val">{top3}</div><div class="lbl">Top-3 Finishes</div></div>
+      <div class="pill"><div class="val">{avg_rank:.1f}</div><div class="lbl">Avg Rank</div></div>
+      <div class="pill"><div class="val">{len(drafts)}</div><div class="lbl">Drafts</div></div>
     </div>"""
 
     return f"""<!DOCTYPE html>
@@ -551,17 +487,12 @@ def main():
     wb = load_workbook(xlsx, data_only=True)
 
     print("Reading stats...")
-    batting, pitching, batting_daily, pitching_daily = load_stats(wb)
+    batting, pitching = load_stats(wb)
     print(f"  Batting rows:  {len(batting)}")
     print(f"  Pitching rows: {len(pitching)}")
 
-    # Find the most recent date in stats
-    all_dates = sorted(set(k[0] for k in batting_daily) | set(k[0] for k in pitching_daily))
-    latest_date = all_dates[-1] if all_dates else None
-    print(f"  Latest date:   {latest_date}")
-
     print("Computing scores for all 35 drafts...")
-    drafts = load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest_date, num_weeks=args.weeks)
+    drafts = load_all_drafts(wb, batting, pitching, num_weeks=args.weeks)
 
     generated_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
     print("Building HTML...")
