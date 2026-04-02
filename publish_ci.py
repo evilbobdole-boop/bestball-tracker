@@ -257,7 +257,9 @@ def main():
         ranked      = sorted(teams, key=lambda t: team_data[t]["total"], reverse=True)
         my_rank     = ranked.index(MY_TEAM)+1 if MY_TEAM in ranked else None
         my_pts      = team_data.get(MY_TEAM, {}).get("total", 0.0)
-        second_team = ranked[1] if len(ranked) > 1 else None
+        # Opponent: 3rd if evilbobdole is in top 2, else 2nd
+        opp_idx     = 2 if (my_rank and my_rank <= 2) else 1
+        second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
 
         def build_players_ci(team_name):
             players = []
@@ -347,7 +349,9 @@ def main():
     pub  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pub)
 
-    generated_at = datetime.now().strftime("%B %d, %Y at %I:%M %p UTC")
+    import pytz
+    est = pytz.timezone("America/New_York")
+    generated_at = datetime.now(est).strftime("%B %d, %Y at %I:%M %p EST")
     print("Building HTML...")
     html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
 
