@@ -647,7 +647,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
 
             # Bench rows
             bench_rows = ""
-            for p in d.get("my_bench", []):
+            _my_bench = d.get("my_bench", [])
+            print(f"  Draft {d['num']}: my_bench has {len(_my_bench)} players, second_bench has {len(d.get('second_bench',[]))} players")
+            for p in _my_bench:
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 bench_rows += f"""
                 <tr class="pos-{p['pos']}">
@@ -966,15 +968,11 @@ def git_push(repo_dir, message):
             print(f"stderr: {r.stderr}")
             raise RuntimeError(f"Git command failed: {' '.join(cmd)}")
 
-    # Pull remote changes (GitHub Actions may have pushed) then push
-    subprocess.run(
-        ["git", "-C", str(repo_dir), "fetch", "origin"],
-        capture_output=True, text=True
-    )
-    subprocess.run(
-        ["git", "-C", str(repo_dir), "rebase", "origin/main"],
-        capture_output=True, text=True
-    )
+    # Fetch latest, reset local to match remote, then push our index.html on top
+    subprocess.run(["git", "-C", str(repo_dir), "fetch", "origin"], capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "reset", "--soft", "origin/main"], capture_output=True)
+    # Re-add index.html after reset in case it got unstaged
+    subprocess.run(["git", "-C", str(repo_dir), "add", "index.html"], capture_output=True)
     r = subprocess.run(
         ["git", "-C", str(repo_dir), "push"],
         capture_output=True, text=True
