@@ -866,7 +866,7 @@ def git_push(repo_dir, message):
 
     # Force push — safe since only this script ever pushes to this repo
     r = subprocess.run(
-        ["git", "-C", str(repo_dir), "push", "--force"],
+        ["git", "-C", str(repo_dir), "push"],
         capture_output=True, text=True
     )
     if r.returncode != 0:
