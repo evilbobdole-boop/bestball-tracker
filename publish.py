@@ -174,6 +174,54 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             players.append({**p, "weeks": weeks, "total": round(sum(weeks), 2), "daily": daily, "yesterday": yest})
         return top3_by_pos(players)
 
+    def build_bench(team_name):
+        """Bench = all players NOT in top 3 per pos by week score.
+        Sorted P/IF/OF then week total high to low.
+        Includes Yest/Today for reference only — not part of team total."""
+        all_players = []
+        for p in roster:
+            if p["team_name"] != team_name: continue
+            weeks  = [round(player_score(p["name"], p["mlb"], p["pos"], w, batting, pitching), 2)
+                      for w in range(1, num_weeks + 1)]
+            name_s = strip_accents(str(p["name"]).strip())
+            team_s = str(p["mlb"]).strip().upper().replace("AZ","ARI")
+            src_d  = pitching_daily if p["pos"] == "P" else batting_daily
+            src_y  = pitching_daily if p["pos"] == "P" else batting_daily
+            # Use yesterday_date key for yest
+            daily  = round((pitching_daily if p["pos"]=="P" else batting_daily).get((latest_date,    name_s, team_s), 0.0), 2) if latest_date    else 0.0
+            yest   = round((pitching_daily if p["pos"]=="P" else batting_daily).get((yesterday_date, name_s, team_s), 0.0), 2) if yesterday_date else 0.0
+            # Fix: use pitching_yest/batting_yest equivalent from daily dicts
+            # batting_daily only has latest_date entries — need full batting for yesterday
+            yest   = 0.0  # will be filled below
+            if yesterday_date:
+                yest_src = pitching_daily if p["pos"] == "P" else batting_daily
+                # Actually batting_daily is keyed by latest_date only
+                # Use the raw batting/pitching dicts filtered by yesterday_date
+                from_raw = pitching if p["pos"] == "P" else batting
+                yest = round(sum(v for k, v in from_raw.items()
+                                 if k[0] == yesterday_date and k[1] == name_s and k[2] == team_s), 2)
+            daily_raw = pitching if p["pos"] == "P" else batting
+            daily  = round(sum(v for k, v in daily_raw.items()
+                               if k[0] == latest_date and k[1] == name_s and k[2] == team_s), 2) if latest_date else 0.0
+            all_players.append({**p, "weeks": weeks, "total": round(sum(weeks), 2),
+                                 "daily": daily, "yesterday": yest})
+
+        # Find starters (top 3 per pos)
+        starters = set()
+        by_pos = {"P": [], "IF": [], "OF": []}
+        for p in all_players:
+            if p["pos"] in by_pos:
+                by_pos[p["pos"]].append(p)
+        for pos, plist in by_pos.items():
+            for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
+                starters.add(p["name"])
+
+        # Bench = everyone not a starter, sorted P/IF/OF then total desc
+        pos_order = {"P": 0, "IF": 1, "OF": 2}
+        bench = [p for p in all_players if p["name"] not in starters]
+        bench.sort(key=lambda x: (pos_order.get(x["pos"], 9), -x["total"]))
+        return bench
+
     for sheet_name in wb.sheetnames:
         if not sheet_name.startswith("draftboard_"): continue
         ws  = wb[sheet_name]
@@ -252,6 +300,9 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
         daily_scores = {team: starters_score_for_date(team, latest_date) for team in teams} if latest_date else {}
         daily_ranked = sorted(teams, key=lambda t: daily_scores.get(t, 0.0), reverse=True)
 
+        my_bench     = build_bench(MY_TEAM)     if MY_TEAM in teams else []
+        second_bench = build_bench(second_team) if second_team       else []
+
         drafts.append({
             "num":              num,
             "sheet":            sheet_name,
@@ -262,8 +313,10 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             "my_rank":          my_rank,
             "my_pts":           my_pts,
             "my_players":       my_players,
+            "my_bench":         my_bench,
             "second_team":      second_team,
             "second_players":   second_players,
+            "second_bench":     second_bench,
             "daily_scores":     daily_scores,
             "my_daily":         my_daily,
             "second_today":     second_today,
@@ -592,6 +645,35 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                   <td class="num" style="color:#cc6600;font-weight:bold">{daily:.2f}</td>
                 </tr>"""
 
+            # Bench rows
+            bench_rows = ""
+            for p in d.get("my_bench", []):
+                wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
+                bench_rows += f"""
+                <tr class="pos-{p['pos']}">
+                  <td style="color:#666">{p['name']}</td>
+                  <td>{p['pos']}</td>
+                  <td>{p['mlb']}</td>
+                  <td class="num">{p['total']:.2f}</td>
+                  {wkd}
+                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
+                  <td class="num" style="color:#aaa">{p.get('daily',0.0):.2f}</td>
+                </tr>"""
+
+            s_bench_rows = ""
+            for p in d.get("second_bench", []):
+                wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
+                s_bench_rows += f"""
+                <tr class="pos-{p['pos']}">
+                  <td style="color:#666">{p['name']}</td>
+                  <td>{p['pos']}</td>
+                  <td>{p['mlb']}</td>
+                  <td class="num">{p['total']:.2f}</td>
+                  {wkd}
+                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
+                  <td class="num" style="color:#aaa">{p.get('daily',0.0):.2f}</td>
+                </tr>"""
+
             # Totals rows
             my_yest_tot  = d.get("my_yesterday", 0.0)
             my_today_tot = d.get("my_daily",     0.0)
@@ -634,6 +716,26 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
               <div style="background:#f0f0f0;padding:8px 16px;font-size:12px;display:flex;gap:24px;border-top:2px solid #ccc">
                 <span>Yesterday gap: <strong style="color:{yg_col}">{yg_s}{yg:.2f}</strong></span>
                 <span>Today gap: <strong style="color:{tg_col}">{tg_s}{tg:.2f}</strong></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:3px solid #aaa">
+                <div>
+                  <div style="background:#888;color:#fff;padding:6px 16px;font-size:12px;font-weight:bold">
+                    📋 {MY_TEAM} — Bench
+                  </div>
+                  <table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <tbody>{bench_rows}</tbody>
+                  </table>
+                </div>
+                <div style="border-left:2px solid #ccc">
+                  <div style="background:#5a7fa8;color:#fff;padding:6px 16px;font-size:12px;font-weight:bold">
+                    📋 {second_team} — Bench
+                  </div>
+                  <table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <tbody>{s_bench_rows}</tbody>
+                  </table>
+                </div>
               </div>
             </div>"""
 
