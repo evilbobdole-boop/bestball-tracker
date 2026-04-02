@@ -167,6 +167,36 @@ def top3_by_pos_ci(players):
         result.extend(sorted(by_pos[pos], key=lambda x: x.get("week_total",0), reverse=True)[:3])
     return result
 
+def build_bench_ci(roster, team_name, batting, pitching, batting_daily, pitching_daily,
+                   batting_yest, pitching_yest, latest_date, yesterday_date, weeks):
+    """Bench = all players NOT in top 3 per pos by week score."""
+    all_players = []
+    for p in roster:
+        if p["team_name"] != team_name: continue
+        wk_total = player_score_ci(p["name"], p["mlb"], p["pos"], weeks, batting, pitching)
+        name_s   = strip_accents(str(p["name"]).strip())
+        team_s   = str(p["mlb"]).strip().upper().replace("AZ","ARI")
+        daily    = round((pitching_daily if p["pos"]=="P" else batting_daily).get((latest_date,    name_s, team_s), 0.0), 2)
+        yest     = round((pitching_yest  if p["pos"]=="P" else batting_yest ).get((yesterday_date, name_s, team_s), 0.0), 2) if yesterday_date else 0.0
+        wk_list  = [round(player_score_ci(p["name"], p["mlb"], p["pos"], w, batting, pitching), 2)
+                    for w in range(1, weeks+1)]
+        all_players.append({**p, "week_total": wk_total, "weeks": wk_list,
+                            "total": round(sum(wk_list), 2), "daily": daily, "yesterday": yest})
+
+    # Find starters (top 3 per pos by week total)
+    starters = set()
+    by_pos = {"P": [], "IF": [], "OF": []}
+    for p in all_players:
+        if p["pos"] in by_pos: by_pos[p["pos"]].append(p)
+    for pos, plist in by_pos.items():
+        for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
+            starters.add(p["name"])
+
+    pos_order = {"P": 0, "IF": 1, "OF": 2}
+    bench = [p for p in all_players if p["name"] not in starters]
+    bench.sort(key=lambda x: (pos_order.get(x["pos"], 9), -x["total"]))
+    return bench
+
 def team_week_score_ci(roster, team_name, week, batting, pitching):
     by_pos = {"P": [], "IF": [], "OF": []}
     for p in roster:
@@ -246,6 +276,8 @@ def main():
 
         my_players     = build_players_ci(MY_TEAM)     if MY_TEAM in teams else []
         second_players = build_players_ci(second_team) if second_team      else []
+        my_bench       = build_bench_ci(roster, MY_TEAM,     batting, pitching, batting_daily, pitching_daily, batting_yest, pitching_yest, latest_date, yesterday_date, args.weeks) if MY_TEAM in teams else []
+        second_bench   = build_bench_ci(roster, second_team, batting, pitching, batting_daily, pitching_daily, batting_yest, pitching_yest, latest_date, yesterday_date, args.weeks) if second_team      else []
 
         my_daily      = starters_score_ci(roster, MY_TEAM,     latest_date,    batting, pitching, args.weeks) if MY_TEAM in teams else 0.0
         second_today  = starters_score_ci(roster, second_team, latest_date,    batting, pitching, args.weeks) if second_team      else 0.0
@@ -268,8 +300,9 @@ def main():
             "num": num, "sheet": sheet_name, "roster": roster,
             "teams": teams, "data": team_data, "ranked": ranked,
             "my_rank": my_rank, "my_pts": my_pts,
-            "my_players": my_players, "second_team": second_team,
-            "second_players": second_players, "daily_scores": daily_scores,
+            "my_players": my_players, "my_bench": my_bench,
+            "second_team": second_team, "second_players": second_players,
+            "second_bench": second_bench, "daily_scores": daily_scores,
             "my_daily": my_daily, "second_today": second_today,
             "my_daily_gap": round(my_daily - second_today, 2),
             "my_yesterday": my_yesterday, "second_yesterday": second_yest,
