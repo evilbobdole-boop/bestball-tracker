@@ -144,7 +144,7 @@ def team_day_score(roster, team_name, date_str, batting_daily, pitching_daily,
                 total += batting_daily.get(key, 0.0)
     return round(total, 2)
 
-def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest_date, yesterday_date, num_weeks):
+def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest_date, yesterday_date, num_weeks, adp_players=None):
     drafts = []
 
     def top3_by_pos(players):
@@ -276,7 +276,58 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
         })
 
     drafts.sort(key=lambda d: d["num"])
-    return drafts
+
+    # ── Player analytics ──
+    player_analytics = []
+    if adp_players:
+        total_drafts = len(drafts)
+        for p in adp_players:
+            pname = p["name"]
+            ppos  = p["pos"]
+            pmlb  = p["mlb"]
+
+            # Count appearances across all drafts
+            times_drafted    = 0  # by anyone
+            drafted_by_me    = 0  # by evilbobdole
+            cashing          = 0  # evilbobdole has them + draft top 2
+
+            for d in drafts:
+                # Is this player in this draft at all?
+                in_draft   = any(r["name"] == pname and r["mlb"] == pmlb for r in d["roster"])
+                on_my_team = any(r["name"] == pname and r["mlb"] == pmlb and r["team_name"] == MY_TEAM
+                                 for r in d["roster"])
+                if in_draft:
+                    times_drafted += 1
+                if on_my_team:
+                    drafted_by_me += 1
+                # Cashing = player is owned by ANY team currently in top 2
+                if in_draft:
+                    top2_teams = set(d["ranked"][:2]) if len(d["ranked"]) >= 2 else set(d["ranked"])
+                    owner = next((r["team_name"] for r in d["roster"]
+                                  if r["name"] == pname and r["mlb"] == pmlb), None)
+                    if owner and owner in top2_teams:
+                        cashing += 1
+
+            draft_pct    = round(times_drafted / total_drafts * 100, 1)
+            season_total = round(sum(
+                player_score(pname, pmlb, ppos, w, batting, pitching)
+                for w in range(1, num_weeks + 1)
+            ), 2)
+            week_totals  = [round(player_score(pname, pmlb, ppos, w, batting, pitching), 2)
+                            for w in range(num_weeks, 0, -1)]  # latest first
+
+            player_analytics.append({
+                "name":         pname,
+                "pos":          ppos,
+                "mlb":          pmlb,
+                "draft_pct":    draft_pct,
+                "drafted_by_me":drafted_by_me,
+                "cashing":      cashing,
+                "season_total": season_total,
+                "week_totals":  week_totals,
+            })
+
+    return drafts, player_analytics
 
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
@@ -389,6 +440,22 @@ tr:hover td { background: #F7F9FC; }
 .pos-P  td { background: #EAF2FB; }
 .pos-break td { border-top: 2px solid #aaa !important; }
 
+/* TABS */
+.tabs { display: flex; border-bottom: 2px solid var(--blue); margin: 24px 0 0; }
+.tab-btn {
+  padding: 10px 24px; cursor: pointer; font-size: 14px; font-weight: bold;
+  border: none; background: #E8EEF7; color: #555; border-radius: 6px 6px 0 0;
+  margin-right: 4px; transition: background 0.15s;
+}
+.tab-btn.active { background: var(--blue); color: #fff; }
+.tab-btn:hover:not(.active) { background: #d0d8ea; }
+.tab-content { display: none; background: var(--card); border-radius: 0 0 10px 10px;
+               box-shadow: 0 2px 8px rgba(0,0,0,.07); overflow-x: auto; }
+.tab-content.active { display: block; }
+.atab { display: none; }
+.atab.active { display: block; }
+.tab-section { margin-bottom: 32px; }
+
 /* RESPONSIVE */
 @media(max-width:600px){
   .hero h1 { font-size: 20px; }
@@ -396,10 +463,12 @@ tr:hover td { background: #F7F9FC; }
   .pills   { gap: 10px; }
   .pill    { min-width: 90px; padding: 10px 14px; }
   .pill .val { font-size: 18px; }
+  .tab-btn { padding: 8px 14px; font-size: 12px; }
 }
 """
 
-def build_html(drafts, num_weeks, generated_at):
+def build_html(drafts, player_analytics, num_weeks, generated_at):
+    wk_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
     # Aggregate stats
     my_drafts    = [d for d in drafts if MY_TEAM in d["teams"]]
     top2         = sum(1 for d in my_drafts if d["my_rank"] and d["my_rank"] <= 2)
@@ -410,11 +479,9 @@ def build_html(drafts, num_weeks, generated_at):
     low_leader   = min(leader_pts) if leader_pts else 0.0
 
 
-    wk_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
-
-    # ── NAV ──
-    nav_links = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
-    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#summary">Summary</a>{nav_links}</nav>'
+    # ── PLAYER ANALYTICS ──
+    # Build per-player stats across all drafts
+    # Collect all unique players from all rosters
 
     # ── SEASON SUMMARY TABLE ── sorted by evilbobdole points descending
     sum_rows = ""
@@ -598,6 +665,10 @@ def build_html(drafts, num_weeks, generated_at):
         </div>"""
 
     # ── FULL PAGE ──
+    # ── NAV ──
+    nav_links = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
+    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#summary">Summary</a>{nav_links}</nav>'
+
     pills = f"""
     <div class="pills">
       <div class="pill"><div class="val">{top2}</div><div class="lbl">Top-2 Finishes</div></div>
@@ -606,13 +677,77 @@ def build_html(drafts, num_weeks, generated_at):
       <div class="pill"><div class="val">{low_leader:.2f}</div><div class="lbl">Low Leader Score</div></div>
     </div>"""
 
+    # ── PLAYER ANALYTICS TABS ──
+    wk_cols = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
+    # ── SEASON SUMMARY TABLE (used as first analytics tab) ──
+    summary_table = f"""
+    <table>
+      <thead>
+        <tr><th>Draft</th><th>My Points</th><th>Rank</th>
+            <th>2nd Place Pts</th><th>Gap to 2nd</th><th>Result</th>
+            <th>Today</th><th>Daily vs 2nd</th></tr>
+      </thead>
+      <tbody>{sum_rows}</tbody>
+    </table>"""
+
+    # ── PLAYER ANALYTICS (4 tabs: Summary, P, IF, OF) ──
+    wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
+
+    def analytics_table(pos_filter):
+        pos_players = [p for p in player_analytics if p["pos"] == pos_filter]
+        pos_players.sort(key=lambda x: x["season_total"], reverse=True)
+        rows = ""
+        for p in pos_players:
+            wk_tds = "".join(
+                f'<td class="num">{p["week_totals"][w-1] if w <= len(p["week_totals"]) else 0.0:.2f}</td>'
+                for w in range(num_weeks, 0, -1)
+            )
+            rows += f"""<tr>
+              <td>{p["name"]}</td>
+              <td style="text-align:center">{p["drafted_by_me"]}</td>
+              <td style="text-align:center">{p["cashing"]}</td>
+              <td class="num bold">{p["season_total"]:.2f}</td>
+              {wk_tds}
+            </tr>"""
+        return f"""
+        <table>
+          <thead><tr>
+            <th>Player</th><th>Drafted</th><th>Cashing</th><th>Season</th>{wk_hdrs_rev}
+          </tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+    analytics_section = f"""
+    <div class="summary" style="margin-top:24px">
+      <div class="sec-title">📊 Season Overview — evilbobdole</div>
+      <div style="display:flex;gap:0;border-bottom:2px solid #1F4E79;padding:0 16px;background:#f8f9fc">
+        <button class="tab-btn active" onclick="showAnalyticsTab('SUM',this)">📋 Summary</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('P',this)">⚾ Pitchers</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('IF',this)">🏃 Infielders</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('OF',this)">🌴 Outfielders</button>
+      </div>
+      <div id="atab-SUM" class="atab active">{summary_table}</div>
+      <div id="atab-P"   class="atab">{analytics_table("P")}</div>
+      <div id="atab-IF"  class="atab">{analytics_table("IF")}</div>
+      <div id="atab-OF"  class="atab">{analytics_table("OF")}</div>
+    </div>"""
+
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>⚾ MLB Best Ball $600K Slugfest</title>
-<style>{CSS}</style>
+<style>{CSS}
+.tab-btn {{
+  padding: 10px 20px; background: #E8EEF7; border: none; cursor: pointer;
+  font-size: 13px; font-weight: bold; color: #333; border-right: 1px solid #ccc;
+}}
+.tab-btn.active {{ background: #1F4E79; color: #fff; }}
+.tab-btn:hover:not(.active) {{ background: #d0daf0; }}
+.tab-panel {{ overflow-x: auto; }}
+</style>
 </head>
 <body>
 {nav}
@@ -623,10 +758,18 @@ def build_html(drafts, num_weeks, generated_at):
 </div>
 {pills}
 <div class="container">
-{summary}
+{analytics_section}
 {draft_cards}
 </div>
 <script>
+// Tab switching
+function showAnalyticsTab(pos, btn) {{
+  document.querySelectorAll('.atab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('atab-'+pos).classList.add('active');
+  btn.classList.add('active');
+}}
+
 // Smooth scroll
 document.querySelectorAll('a[href^="#"]').forEach(a => {{
   a.addEventListener('click', e => {{
@@ -723,7 +866,7 @@ def git_push(repo_dir, message):
 
     # Force push — safe since only this script ever pushes to this repo
     r = subprocess.run(
-        ["git", "-C", str(repo_dir), "push", "--force"],
+        ["git", "-C", str(repo_dir), "push"],
         capture_output=True, text=True
     )
     if r.returncode != 0:
@@ -758,13 +901,39 @@ def main():
     print(f"  Latest date:   {latest_date}")
     print(f"  Yesterday:     {yesterday_date}")
 
-    print("Computing scores for all 35 drafts...")
-    drafts = load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily,
-                             latest_date, yesterday_date, num_weeks=args.weeks)
+    # Build player list for analytics from draft rosters (no ADP file needed)
+    # Collect all unique players across all drafts with pos/mlb info
+    adp_players = []
+    seen_players = set()
+    try:
+        wb_check = load_workbook(xlsx, data_only=True)
+        for sheet_name in wb_check.sheetnames:
+            if not sheet_name.startswith("draftboard_"): continue
+            ws = wb_check[sheet_name]
+            for row in range(2, 242):
+                name = ws.cell(row, 2).value
+                pos  = ws.cell(row, 3).value
+                mlb  = ws.cell(row, 4).value
+                if not name or not pos: continue
+                name_s = strip_accents(str(name).strip())
+                pos_s  = str(pos).strip()
+                mlb_s  = str(mlb).strip().upper().replace("AZ","ARI") if mlb else ""
+                key    = (name_s, pos_s)
+                if key not in seen_players and pos_s in ("P","IF","OF"):
+                    seen_players.add(key)
+                    adp_players.append({"name": name_s, "pos": pos_s, "mlb": mlb_s})
+        wb_check.close()
+        print(f"  Unique players for analytics: {len(adp_players)}")
+    except Exception as e:
+        print(f"  Player list build failed: {e}")
+
+    result = load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily,
+                             latest_date, yesterday_date, num_weeks=args.weeks, adp_players=adp_players)
+    drafts, player_analytics = result
 
     generated_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
     print("Building HTML...")
-    html = build_html(drafts, num_weeks=args.weeks, generated_at=generated_at)
+    html = build_html(drafts, player_analytics, args.weeks, generated_at)
 
     out = Path("index.html") if args.local else REPO_DIR / "index.html"
     out.write_text(html, encoding="utf-8")
