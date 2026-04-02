@@ -261,8 +261,14 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
         my_rank = ranked.index(MY_TEAM) + 1 if MY_TEAM in ranked else None
         my_pts  = team_data.get(MY_TEAM, {}).get("total", 0.0)
 
-        # 2nd place team (by season score)
-        second_team = ranked[1] if len(ranked) > 1 else None
+        # Opponent team: if evilbobdole is 1st or 2nd, compare to 3rd (threat from below)
+        # If evilbobdole is 3rd-12th, compare to 2nd (target to chase)
+        my_rank_tmp = ranked.index(MY_TEAM) + 1 if MY_TEAM in ranked else None
+        if my_rank_tmp and my_rank_tmp <= 2:
+            opp_idx = 2  # 3rd place
+        else:
+            opp_idx = 1  # 2nd place
+        second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
 
         # Build starter player lists (top 3 per pos by week score)
         my_players     = build_players(MY_TEAM)     if MY_TEAM in teams else []
@@ -541,14 +547,15 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     for d in sorted(drafts, key=lambda d: d["my_pts"], reverse=True):
         rank     = d["my_rank"]
         my_pts   = d["my_pts"]
-        # 2nd place
-        second       = d["ranked"][1] if len(d["ranked"]) > 1 else d["ranked"][0] if d["ranked"] else None
-        second_pts   = d["data"].get(second, {}).get("total", 0.0) if second else 0.0
-        # Gap to 2nd (if I'm 1st, gap to 2nd; if I'm not 1st, gap to whoever is 2nd)
-        if rank == 1:
-            gap = round(my_pts - second_pts, 2)
+        # If evilbobdole is 1st or 2nd, compare to 3rd (threat from below)
+        # If evilbobdole is 3rd-12th, compare to 2nd (target to chase)
+        if rank and rank <= 2:
+            opp_idx = 2  # 3rd place (index 2)
         else:
-            gap = round(my_pts - second_pts, 2)
+            opp_idx = 1  # 2nd place (index 1)
+        second       = d["ranked"][opp_idx] if len(d["ranked"]) > opp_idx else None
+        second_pts   = d["data"].get(second, {}).get("total", 0.0) if second else 0.0
+        gap          = round(my_pts - second_pts, 2)
         gap_str  = (f'<span style="color:#1a7a1a;font-weight:bold">+{gap:.2f}</span>' if gap > 0
                     else f'<span style="color:#b00;font-weight:bold">{gap:.2f}</span>' if gap < 0
                     else "0.00")
@@ -580,7 +587,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <table>
         <thead>
           <tr><th>Draft</th><th>My Points</th><th>Rank</th>
-              <th>2nd Place Pts</th><th>Gap to 2nd</th><th>Result</th>
+              <th>Opp Pts</th><th>Gap to Opp</th><th>Result</th>
               <th>Today</th><th>Today vs 2nd</th>
               <th>Yesterday</th><th>Yest vs 2nd</th></tr>
         </thead>
@@ -647,9 +654,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
 
             # Bench rows
             bench_rows = ""
-            _my_bench = d.get("my_bench", [])
-            print(f"  Draft {d['num']}: my_bench has {len(_my_bench)} players, second_bench has {len(d.get('second_bench',[]))} players")
-            for p in _my_bench:
+            for p in d.get("my_bench", []):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 bench_rows += f"""
                 <tr class="pos-{p['pos']}">
@@ -1039,7 +1044,9 @@ def main():
                              latest_date, yesterday_date, num_weeks=args.weeks, adp_players=adp_players)
     drafts, player_analytics = result
 
-    generated_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    import pytz
+    est = pytz.timezone("America/New_York")
+    generated_at = datetime.now(est).strftime("%B %d, %Y at %I:%M %p EST")
     print("Building HTML...")
     html = build_html(drafts, player_analytics, args.weeks, generated_at)
 
