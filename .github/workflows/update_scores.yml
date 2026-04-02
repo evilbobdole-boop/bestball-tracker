@@ -2,32 +2,32 @@ name: Update MLB Best Ball Scores
 
 on:
   schedule:
-    # Runs every 15 minutes from 1pm to midnight ET (18:00-05:00 UTC)
-    # GitHub Actions uses UTC. ET is UTC-4 (EDT) or UTC-5 (EST).
-    # 1pm ET = 17:00 UTC, midnight ET = 04:00 UTC
-    - cron: '0,15,30,45 17-23 * * *'   # 1pm-7pm ET
-    - cron: '0,15,30,45 0-4 * * *'     # 7pm-midnight ET
-    # Also run once at 10am ET (14:00 UTC) to catch overnight game finals
+    - cron: '0,15,30,45 17-23 * * *'
+    - cron: '0,15,30,45 0-4 * * *'
     - cron: '0 14 * * *'
-  workflow_dispatch:  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # needed to push index.html back to repo
+      contents: write
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests openpyxl
+        run: pip install requests openpyxl pytz
 
       - name: Generate leaderboard HTML
         run: python publish_ci.py
@@ -36,6 +36,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add index.html stats_cache.json || true
           git diff --staged --quiet || git commit -m "Auto-update scores $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push
