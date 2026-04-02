@@ -951,7 +951,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {{
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def git_push(repo_dir, message):
-    # Add and commit
+    # Stage and commit index.html
     for cmd in [
         ["git", "-C", str(repo_dir), "add", "index.html"],
         ["git", "-C", str(repo_dir), "commit", "-m", message],
@@ -966,7 +966,15 @@ def git_push(repo_dir, message):
             print(f"stderr: {r.stderr}")
             raise RuntimeError(f"Git command failed: {' '.join(cmd)}")
 
-    # Force push — safe since only this script ever pushes to this repo
+    # Pull remote changes (GitHub Actions may have pushed) then push
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "fetch", "origin"],
+        capture_output=True, text=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "rebase", "origin/main"],
+        capture_output=True, text=True
+    )
     r = subprocess.run(
         ["git", "-C", str(repo_dir), "push"],
         capture_output=True, text=True
