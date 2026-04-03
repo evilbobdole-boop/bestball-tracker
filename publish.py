@@ -515,14 +515,34 @@ tr:hover td { background: #F7F9FC; }
 .atab.active { display: block; }
 .tab-section { margin-bottom: 32px; }
 
+/* TABLE SCROLL WRAPPER */
+.tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 /* RESPONSIVE */
-@media(max-width:600px){
-  .hero h1 { font-size: 20px; }
-  td, th   { padding: 6px 8px; font-size: 12px; }
-  .pills   { gap: 10px; }
-  .pill    { min-width: 90px; padding: 10px 14px; }
-  .pill .val { font-size: 18px; }
-  .tab-btn { padding: 8px 14px; font-size: 12px; }
+@media(max-width:768px){
+  /* Stack side-by-side grids vertically */
+  .side-by-side { grid-template-columns: 1fr !important; }
+  /* All tables scroll horizontally */
+  table { min-width: 500px; }
+  .draft-card table { min-width: 400px; }
+  /* Smaller text */
+  td, th { padding: 5px 7px; font-size: 11px; }
+  /* Nav wraps */
+  nav { height: auto; padding: 6px 10px; flex-wrap: wrap; }
+  /* Pills wrap tighter */
+  .pills { gap: 8px; margin: 12px 8px 0; }
+  .pill  { min-width: 80px; padding: 10px 12px; }
+  .pill .val { font-size: 16px; }
+  .pill .lbl { font-size: 10px; }
+  /* Hero smaller */
+  .hero h1  { font-size: 18px; }
+  .hero .sub { font-size: 11px; }
+  /* Tab buttons wrap */
+  .tab-btn { padding: 7px 12px; font-size: 11px; }
+  /* Draft header stacks */
+  .draft-header { flex-direction: column; align-items: flex-start; }
+  /* Container padding */
+  .container { padding: 0 6px 40px; }
 }
 """
 
@@ -584,7 +604,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     summary = f"""
     <div id="summary" class="summary">
       <div class="sec-title">📊 Season Summary — {MY_TEAM}</div>
-      <table>
+      <div class="tbl-scroll"><table>
         <thead>
           <tr><th>Draft</th><th>My Points</th><th>Rank</th>
               <th>Opp Pts</th><th>Gap to Opp</th><th>Result</th>
@@ -592,7 +612,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
               <th>Yesterday</th><th>Yest vs 2nd</th></tr>
         </thead>
         <tbody>{sum_rows}</tbody>
-      </table>
+      </table></div>
     </div>"""
 
     # ── PER-DRAFT CARDS ──
@@ -692,10 +712,10 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
 
             player_html = f"""
             <div class="player-section">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+              <div class="side-by-side" style="display:grid;grid-template-columns:1fr 1fr;gap:0">
                 <div>
                   <div class="player-header">⚾ {MY_TEAM} — Player Scores</div>
-                  <table>
+                  <div class="tbl-scroll"><table>
                     <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
                     <tbody>{p_rows}
                     <tr style="background:#d0f5d0;font-weight:bold;border-top:2px solid #333">
@@ -704,11 +724,11 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                       <td class="num">{my_today_tot:.2f}</td>
                     </tr>
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
                 <div style="border-left:2px solid #ccc">
                   <div class="player-header" style="background:#2E75B6">🏆 2nd Place: {second_team}</div>
-                  <table>
+                  <div class="tbl-scroll"><table>
                     <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
                     <tbody>{s_rows}
                     <tr style="background:#dce8f5;font-weight:bold;border-top:2px solid #333">
@@ -717,7 +737,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                       <td class="num">{s_today_tot:.2f}</td>
                     </tr>
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               </div>
               <div style="background:#f0f0f0;padding:8px 16px;font-size:12px;display:flex;gap:24px;border-top:2px solid #ccc">
@@ -729,19 +749,19 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                   <div style="background:#888;color:#fff;padding:6px 16px;font-size:12px;font-weight:bold">
                     📋 {MY_TEAM} — Bench
                   </div>
-                  <table>
+                  <div class="tbl-scroll"><table>
                     <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
                     <tbody>{bench_rows}</tbody>
-                  </table>
+                  </table></div>
                 </div>
                 <div style="border-left:2px solid #ccc">
                   <div style="background:#5a7fa8;color:#fff;padding:6px 16px;font-size:12px;font-weight:bold">
                     📋 {second_team} — Bench
                   </div>
-                  <table>
+                  <div class="tbl-scroll"><table>
                     <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
                     <tbody>{s_bench_rows}</tbody>
-                  </table>
+                  </table></div>
                 </div>
               </div>
             </div>"""
@@ -766,10 +786,10 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
             {badge}
             {back_link}
           </div>
-          <table>
+          <div class="tbl-scroll"><table>
             <thead><tr><th>#</th><th>Team</th><th>Total</th>{wk_hdrs}</tr></thead>
             <tbody>{ldr_rows}</tbody>
-          </table>
+          </table></div>
           {player_html}
         </div>"""
 
@@ -799,7 +819,56 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <tbody>{sum_rows}</tbody>
     </table>"""
 
-    # ── PLAYER ANALYTICS (4 tabs: Summary, P, IF, OF) ──
+    # ── TODAY / YESTERDAY TABLES ──
+    _latest    = drafts[0].get("latest_date")    if drafts else None
+    _yesterday = drafts[0].get("yesterday_date") if drafts else None
+
+    # Collect all unique players with their daily/yesterday scores
+    daily_players = {}
+    for d in drafts:
+        for plist in [d.get("my_players",[]), d.get("second_players",[]),
+                      d.get("my_bench",[]),   d.get("second_bench",[])]:
+            for p in plist:
+                key = (strip_accents(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
+                if key not in daily_players:
+                    daily_players[key] = {"name": p["name"], "mlb": p["mlb"], "pos": p["pos"],
+                                          "today": 0.0, "yesterday": 0.0}
+                daily_players[key]["today"]     = max(daily_players[key]["today"],     p.get("daily",     0.0))
+                daily_players[key]["yesterday"] = max(daily_players[key]["yesterday"], p.get("yesterday", 0.0))
+
+    # Count times each player was drafted by evilbobdole across all 35 drafts
+    drafted_counts = {}
+    for d in drafts:
+        for p in d["roster"]:
+            if p["team_name"] == MY_TEAM:
+                key = (strip_accents(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
+                drafted_counts[key] = drafted_counts.get(key, 0) + 1
+
+    def make_daily_table(sort_key, date_lbl):
+        rows = ""
+        for p in sorted(daily_players.values(), key=lambda x: x[sort_key], reverse=True):
+            if p[sort_key] == 0.0: continue
+            key      = (strip_accents(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
+            drafted  = drafted_counts.get(key, 0)
+            me_style = ' style="background:#E6FFE6;font-weight:bold"' if drafted > 0 else ""
+            rows += f"""<tr{me_style}>
+              <td>{p["name"]}</td>
+              <td>{p["pos"]}</td>
+              <td>{p["mlb"]}</td>
+              <td class="num" style="font-weight:bold;color:#1a7a1a">{p[sort_key]:.2f}</td>
+              <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
+            </tr>"""
+        return f"""<table>
+          <thead><tr><th>Player</th><th>Pos</th><th>MLB</th>
+            <th>{date_lbl}</th><th>Drafted</th>
+          </tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+    today_table = make_daily_table("today",     f"Today ({_latest or '—'})")
+    yest_table  = make_daily_table("yesterday", f"Yesterday ({_yesterday or '—'})")
+
+    # ── PLAYER ANALYTICS (5 tabs: Summary, Daily, P, IF, OF) ──
     wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
 
     def analytics_table(pos_filter):
@@ -829,16 +898,20 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     analytics_section = f"""
     <div class="summary" style="margin-top:24px">
       <div class="sec-title">📊 Season Overview — evilbobdole</div>
-      <div style="display:flex;gap:0;border-bottom:2px solid #1F4E79;padding:0 16px;background:#f8f9fc">
+      <div style="display:flex;gap:0;border-bottom:2px solid #1F4E79;padding:0 16px;background:#f8f9fc;flex-wrap:wrap">
         <button class="tab-btn active" onclick="showAnalyticsTab('SUM',this)">📋 Summary</button>
         <button class="tab-btn" onclick="showAnalyticsTab('P',this)">⚾ Pitchers</button>
         <button class="tab-btn" onclick="showAnalyticsTab('IF',this)">🏃 Infielders</button>
         <button class="tab-btn" onclick="showAnalyticsTab('OF',this)">🌴 Outfielders</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('TODAY',this)">📅 Today</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('YEST',this)">📅 Yesterday</button>
       </div>
-      <div id="atab-SUM" class="atab active">{summary_table}</div>
-      <div id="atab-P"   class="atab">{analytics_table("P")}</div>
-      <div id="atab-IF"  class="atab">{analytics_table("IF")}</div>
-      <div id="atab-OF"  class="atab">{analytics_table("OF")}</div>
+      <div id="atab-SUM"   class="atab active">{summary_table}</div>
+      <div id="atab-P"     class="atab">{analytics_table("P")}</div>
+      <div id="atab-IF"    class="atab">{analytics_table("IF")}</div>
+      <div id="atab-OF"    class="atab">{analytics_table("OF")}</div>
+      <div id="atab-TODAY" class="atab">{today_table}</div>
+      <div id="atab-YEST"  class="atab">{yest_table}</div>
     </div>"""
 
 
@@ -1044,9 +1117,11 @@ def main():
                              latest_date, yesterday_date, num_weeks=args.weeks, adp_players=adp_players)
     drafts, player_analytics = result
 
-    import pytz
-    est = pytz.timezone("America/New_York")
-    generated_at = datetime.now(est).strftime("%B %d, %Y at %I:%M %p EST")
+    from datetime import timezone, timedelta as _tde
+    import time as _t
+    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
+    _now_est  = datetime.utcnow() + _est_off
+    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
     print("Building HTML...")
     html = build_html(drafts, player_analytics, args.weeks, generated_at)
 
