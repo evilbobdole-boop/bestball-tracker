@@ -387,11 +387,8 @@ def main():
     _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
     _now_est  = datetime.utcnow() + _est_off
     generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
-    print("Fetching active lineups...")
-    active_lineups = fetch_active_lineups()
-
     print("Building HTML...")
-    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at, active_lineups)
+    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")
