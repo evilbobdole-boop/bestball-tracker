@@ -868,6 +868,104 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     today_table = make_daily_table("today",     f"Today ({_latest or '—'})")
     yest_table  = make_daily_table("yesterday", f"Yesterday ({_yesterday or '—'})")
 
+    # ── DRAFT STATS TABLE ──
+    # Per-player draft stats for evilbobdole
+    draft_player_stats = {}  # name -> {times, picks, pos, mlb, season_total}
+    round_picks = {}          # round (1-20) -> list of pick numbers within round
+
+    for d in drafts:
+        for p in d["roster"]:
+            if p["team_name"] != MY_TEAM: continue
+            pick = p.get("pick")
+            if not pick: continue
+            try:
+                pick = int(pick)
+            except: continue
+
+            key = strip_accents(p["name"])
+            if key not in draft_player_stats:
+                draft_player_stats[key] = {
+                    "name": p["name"], "pos": p["pos"], "mlb": p["mlb"],
+                    "times": 0, "picks": [], "season_total": 0.0
+                }
+            draft_player_stats[key]["times"] += 1
+            draft_player_stats[key]["picks"].append(pick)
+
+            # Round = ceil(pick / 12), pick within round = ((pick-1) % 12) + 1
+            round_num = (pick - 1) // 12 + 1
+            pick_in_round = (pick - 1) % 12 + 1
+            if round_num not in round_picks:
+                round_picks[round_num] = []
+            round_picks[round_num].append(pick_in_round)
+
+    # Add season totals to player stats
+    for key, ps in draft_player_stats.items():
+        # Find season total from analytics
+        for pa in player_analytics:
+            if strip_accents(pa["name"]) == key:
+                ps["season_total"] = pa["season_total"]
+                break
+
+    # Sort by times drafted desc, then avg pick asc
+    sorted_players = sorted(draft_player_stats.values(),
+                            key=lambda x: (-x["times"], sum(x["picks"])/len(x["picks"])))
+
+    player_rows = ""
+    for ps in sorted_players:
+        picks     = ps["picks"]
+        avg_pick  = round(sum(picks) / len(picks), 1)
+        earliest  = min(picks)
+        latest    = max(picks)
+        me_style  = ' style="background:#E6FFE6"' if ps["times"] >= 5 else ""
+        player_rows += f"""<tr{me_style}>
+          <td>{ps["name"]}</td>
+          <td>{ps["pos"]}</td>
+          <td>{ps["mlb"]}</td>
+          <td style="text-align:center;font-weight:bold">{ps["times"]}</td>
+          <td style="text-align:center">{avg_pick}</td>
+          <td style="text-align:center">{earliest}</td>
+          <td style="text-align:center">{latest}</td>
+          <td class="num">{ps["season_total"]:.2f}</td>
+        </tr>"""
+
+    # Round frequency table
+    round_rows = ""
+    for rnd in range(1, 21):
+        picks = round_picks.get(rnd, [])
+        if not picks: continue
+        from collections import Counter
+        pick_counts = Counter(picks)
+        most_common = pick_counts.most_common(3)
+        common_str = ", ".join(f"#{p} ({c}x)" for p, c in most_common)
+        total = len(picks)
+        round_rows += f"""<tr>
+          <td style="text-align:center;font-weight:bold">Round {rnd}</td>
+          <td style="text-align:center">{total}</td>
+          <td>{common_str}</td>
+        </tr>"""
+
+    draft_stats_table = f"""
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:12px" class="side-by-side">
+      <div>
+        <h4 style="padding:8px 0;color:#1F4E79">Player Draft History</h4>
+        <div class="tbl-scroll"><table>
+          <thead><tr>
+            <th>Player</th><th>Pos</th><th>MLB</th>
+            <th>Times</th><th>Avg Pick</th><th>Earliest</th><th>Latest</th>
+            <th>Season Pts</th>
+          </tr></thead>
+          <tbody>{player_rows}</tbody>
+        </table></div>
+      </div>
+      <div>
+        <h4 style="padding:8px 0;color:#1F4E79">Pick Frequency by Round</h4>
+        <div class="tbl-scroll"><table>
+          <thead><tr><th>Round</th><th>Picks Made</th><th>Most Common Slots</th></tr></thead>
+          <tbody>{round_rows}</tbody>
+        </table></div>
+      </div>
+    </div>"""
+
     # ── PLAYER ANALYTICS (5 tabs: Summary, Daily, P, IF, OF) ──
     wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
 
@@ -905,6 +1003,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         <button class="tab-btn" onclick="showAnalyticsTab('OF',this)">🌴 Outfielders</button>
         <button class="tab-btn" onclick="showAnalyticsTab('TODAY',this)">📅 Today</button>
         <button class="tab-btn" onclick="showAnalyticsTab('YEST',this)">📅 Yesterday</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('DRAFT',this)">🎯 Draft Stats</button>
       </div>
       <div id="atab-SUM"   class="atab active">{summary_table}</div>
       <div id="atab-P"     class="atab">{analytics_table("P")}</div>
@@ -912,6 +1011,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <div id="atab-OF"    class="atab">{analytics_table("OF")}</div>
       <div id="atab-TODAY" class="atab">{today_table}</div>
       <div id="atab-YEST"  class="atab">{yest_table}</div>
+      <div id="atab-DRAFT" class="atab">{draft_stats_table}</div>
     </div>"""
 
 
@@ -1117,11 +1217,15 @@ def main():
                              latest_date, yesterday_date, num_weeks=args.weeks, adp_players=adp_players)
     drafts, player_analytics = result
 
-    from datetime import timezone, timedelta as _tde
     import time as _t
-    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
-    _now_est  = datetime.utcnow() + _est_off
-    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
+    from datetime import timezone, timedelta as _tde
+    # EDT = UTC-4 (Mar-Nov), EST = UTC-5 (Nov-Mar)
+    # Use tm_isdst from localtime as a proxy — works on most systems
+    _is_dst  = bool(_t.localtime().tm_isdst)
+    _est_off = _tde(hours=-4) if _is_dst else _tde(hours=-5)
+    _now_est = datetime.utcnow() + _est_off
+    _tz_lbl  = "EDT" if _is_dst else "EST"
+    generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
     print("Building HTML...")
     html = build_html(drafts, player_analytics, args.weeks, generated_at)
 
