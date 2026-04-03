@@ -99,9 +99,9 @@ def load_all_stats():
         except Exception as e:
             print(f"  Cache load failed: {e}")
 
-    # Fetch missing historical dates
+    # Fetch missing historical dates (skip yesterday — always re-fetch it)
     d = SEASON_START
-    while d <= yesterday:
+    while d <= yesterday - timedelta(days=1):
         if str(d) not in cached_dates:
             print(f"  Fetching {d}...", end=" ", flush=True)
             try:
@@ -112,6 +112,20 @@ def load_all_stats():
                 print(f"✗ {e}")
         d += timedelta(days=1)
 
+    # Always re-fetch yesterday — catches late-finishing games
+    print(f"  Fetching yesterday ({yesterday})...", end=" ", flush=True)
+    try:
+        b, p = fetch_stats_for_date(yesterday)
+        # Remove old yesterday entries before updating
+        for k in list(all_batting.keys()):
+            if k[0] == str(yesterday): del all_batting[k]
+        for k in list(all_pitching.keys()):
+            if k[0] == str(yesterday): del all_pitching[k]
+        all_batting.update(b); all_pitching.update(p)
+        print(f"✓ ({len(b)} batting, {len(p)} pitching)")
+    except Exception as e:
+        print(f"✗ {e}")
+
     # Always fetch today
     print(f"  Fetching today ({today})...", end=" ", flush=True)
     try:
@@ -121,10 +135,11 @@ def load_all_stats():
     except Exception as e:
         print(f"✗ {e}")
 
-    # Save cache (exclude today — may be incomplete)
+    # Save cache (exclude today and yesterday — both always re-fetched)
     try:
-        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] != str(today)}
-        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] != str(today)}
+        exclude = {str(today), str(yesterday)}
+        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] not in exclude}
+        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] not in exclude}
         cache_file.write_text(json.dumps({"batting": cb, "pitching": cp}))
         print(f"  Cache saved.")
     except Exception as e:
