@@ -58,7 +58,8 @@ def fetch_stats_for_date(d: date):
     data = fetch(f"{API}/schedule?sportId=1&date={date_str}")
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
-            if game.get("status", {}).get("abstractGameState") != "Final":
+            state = game.get("status", {}).get("abstractGameState", "")
+            if state not in ("Final", "Live"):
                 continue
             pk = game["gamePk"]
             try:
@@ -397,11 +398,15 @@ def main():
     pub  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pub)
 
-    from datetime import timezone, timedelta as _tde
     import time as _t
-    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
-    _now_est  = datetime.utcnow() + _est_off
-    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
+    from datetime import timezone, timedelta as _tde
+    # EDT = UTC-4 (Mar-Nov), EST = UTC-5 (Nov-Mar)
+    # Use tm_isdst from localtime as a proxy — works on most systems
+    _is_dst  = bool(_t.localtime().tm_isdst)
+    _est_off = _tde(hours=-4) if _is_dst else _tde(hours=-5)
+    _now_est = datetime.utcnow() + _est_off
+    _tz_lbl  = "EDT" if _is_dst else "EST"
+    generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
     print("Building HTML...")
     html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
 
