@@ -209,6 +209,39 @@ def team_week_score_ci(roster, team_name, week, batting, pitching):
 
 # ── ROSTERS ────────────────────────────────────────────────────────────────────
 
+def fetch_active_lineups() -> set:
+    """Fetch confirmed starting lineups for today from the MLB API."""
+    import urllib.request, json, unicodedata as _u
+    active = set()
+    try:
+        import pytz
+        est   = pytz.timezone("America/New_York")
+        today = __import__("datetime").datetime.now(est).strftime("%Y-%m-%d")
+        url   = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}&hydrate=lineups"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        def clean(name):
+            return "".join(c for c in _u.normalize("NFD", name) if _u.category(c) != "Mn")
+        for date_entry in data.get("dates", []):
+            for game in date_entry.get("games", []):
+                lineups = game.get("lineups", {})
+                for side, key in (("home","homePlayers"),("away","awayPlayers")):
+                    team = game.get("teams",{}).get(side,{}).get("team",{}).get("abbreviation","").replace("AZ","ARI")
+                    for player in lineups.get(key, []):
+                        name = clean(player.get("fullName",""))
+                        if name and team: active.add((name, team))
+                for side in ("home","away"):
+                    pp   = game.get("teams",{}).get(side,{}).get("probablePitcher",{})
+                    team = game.get("teams",{}).get(side,{}).get("team",{}).get("abbreviation","").replace("AZ","ARI")
+                    if pp:
+                        name = clean(pp.get("fullName",""))
+                        if name and team: active.add((name, team))
+        print(f"  Active lineups: {len(active)} players confirmed")
+    except Exception as e:
+        print(f"  Lineup fetch failed (non-critical): {e}")
+    return active
+
+
 def load_rosters():
     roster_file = Path("rosters.json")
     if not roster_file.exists():
@@ -349,11 +382,16 @@ def main():
     pub  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pub)
 
-    import pytz
-    est = pytz.timezone("America/New_York")
-    generated_at = datetime.now(est).strftime("%B %d, %Y at %I:%M %p EST")
+    from datetime import timezone, timedelta as _tde
+    import time as _t
+    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
+    _now_est  = datetime.utcnow() + _est_off
+    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
+    print("Fetching active lineups...")
+    active_lineups = fetch_active_lineups()
+
     print("Building HTML...")
-    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
+    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at, active_lineups)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")
