@@ -54,14 +54,20 @@ def fetch(url):
     r = requests.get(url, timeout=20); r.raise_for_status(); return r.json()
 
 def fetch_stats_for_date(d: date):
+    """Fetch stats for a date. Each game is processed exactly once.
+    Final games take priority — if a game is both Live and cached as Final,
+    we only process it once to avoid double-counting."""
     batting = {}; pitching = {}; date_str = str(d)
     data = fetch(f"{API}/schedule?sportId=1&date={date_str}")
+    processed_games = set()  # track gamePks already processed
+    
+    # First pass: process all Final games
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
             state = game.get("status", {}).get("abstractGameState", "")
-            if state not in ("Final", "Live"):
-                continue
+            if state != "Final": continue
             pk = game["gamePk"]
+            processed_games.add(pk)
             try:
                 box = fetch(f"{API}/game/{pk}/boxscore")
             except Exception:
@@ -80,6 +86,34 @@ def fetch_stats_for_date(d: date):
                         if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
                         key  = (date_str, name, team_abbr)
                         pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
+
+    # Second pass: process Live games that aren't already Final
+    for date_entry in data.get("dates", []):
+        for game in date_entry.get("games", []):
+            state = game.get("status", {}).get("abstractGameState", "")
+            if state != "Live": continue
+            pk = game["gamePk"]
+            if pk in processed_games: continue  # already have Final version
+            processed_games.add(pk)
+            try:
+                box = fetch(f"{API}/game/{pk}/boxscore")
+            except Exception:
+                continue
+            for side in ("home", "away"):
+                team_abbr = box["teams"][side]["team"]["abbreviation"].replace("AZ","ARI")
+                for p in box["teams"][side]["players"].values():
+                    bs = p.get("stats", {}).get("batting")
+                    if bs and bs.get("atBats",0)+bs.get("baseOnBalls",0)+bs.get("hitByPitch",0) > 0:
+                        name = strip_accents(p["person"]["fullName"])
+                        key  = (date_str, name, team_abbr)
+                        batting[key] = batting.get(key, 0.0) + batting_dk(bs)
+                    ps = p.get("stats", {}).get("pitching")
+                    if ps and float(ps.get("inningsPitched", 0)) > 0:
+                        name = strip_accents(p["person"]["fullName"])
+                        if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
+                        key  = (date_str, name, team_abbr)
+                        pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
+
     return batting, pitching
 
 def load_all_stats():
