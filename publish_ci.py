@@ -62,10 +62,14 @@ def fetch_stats_for_date(d: date):
     processed_games = set()  # track gamePks already processed
     
     # First pass: process all Final games
+    # Exclude postponed, suspended, cancelled games
+    skip_states = {"Postponed", "Cancelled", "Suspended", "Delayed"}
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
-            state = game.get("status", {}).get("abstractGameState", "")
+            state    = game.get("status", {}).get("abstractGameState", "")
+            detailed = game.get("status", {}).get("detailedState", "")
             if state != "Final": continue
+            if any(s.lower() in detailed.lower() for s in skip_states): continue
             pk = game["gamePk"]
             processed_games.add(pk)
             try:
@@ -90,8 +94,10 @@ def fetch_stats_for_date(d: date):
     # Second pass: process Live games that aren't already Final
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
-            state = game.get("status", {}).get("abstractGameState", "")
+            state    = game.get("status", {}).get("abstractGameState", "")
+            detailed = game.get("status", {}).get("detailedState", "")
             if state != "Live": continue
+            if any(s.lower() in detailed.lower() for s in skip_states): continue
             pk = game["gamePk"]
             if pk in processed_games: continue  # already have Final version
             processed_games.add(pk)
