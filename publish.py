@@ -270,6 +270,11 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             opp_idx = 1  # 2nd place
         second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
 
+        # Weekly gap: my current week score vs opponent current week score
+        my_week_pts  = team_data.get(MY_TEAM, {}).get("weeks", [0.0])[-1] if MY_TEAM in teams else 0.0
+        opp_week_pts = team_data.get(second_team, {}).get("weeks", [0.0])[-1] if second_team else 0.0
+        my_week_gap  = round(my_week_pts - opp_week_pts, 2)
+
         # Build starter player lists (top 3 per pos by week score)
         my_players     = build_players(MY_TEAM)     if MY_TEAM in teams else []
         second_players = build_players(second_team) if second_team       else []
@@ -318,6 +323,8 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             "ranked":           ranked,
             "my_rank":          my_rank,
             "my_pts":           my_pts,
+            "my_week_pts":      my_week_pts,
+            "my_week_gap":      my_week_gap,
             "my_players":       my_players,
             "my_bench":         my_bench,
             "second_team":      second_team,
@@ -587,6 +594,11 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         my_daily_gap = d.get("my_daily_gap", 0.0)
         dgap_color   = "#1a7a1a" if my_daily_gap >= 0 else "#b00"
         dgap_sign    = "+" if my_daily_gap >= 0 else ""
+        # Weekly gap
+        my_wk_pts  = d.get("my_week_pts", 0.0)
+        my_wk_gap  = d.get("my_week_gap", 0.0)
+        wgap_color = "#1a7a1a" if my_wk_gap >= 0 else "#b00"
+        wgap_sign  = "+" if my_wk_gap >= 0 else ""
         sum_rows += f"""
         <tr class="{me_cls}">
           <td><a href="#d{d['num']}">Draft {d['num']}</a></td>
@@ -595,6 +607,8 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
           <td class="num">{second_pts:.2f}</td>
           <td class="num">{gap_str}</td>
           <td style="text-align:center">{result}</td>
+          <td class="num">{my_wk_pts:.2f}</td>
+          <td class="num" style="color:{wgap_color};font-weight:bold">{wgap_sign}{my_wk_gap:.2f}</td>
           <td class="num">{my_daily:.2f}</td>
           <td class="num" style="color:{dgap_color};font-weight:bold">{dgap_sign}{my_daily_gap:.2f}</td>
           <td class="num">{d.get("my_yesterday", 0.0):.2f}</td>
@@ -608,6 +622,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         <thead>
           <tr><th>Draft</th><th>My Points</th><th>Rank</th>
               <th>Opp Pts</th><th>Gap to Opp</th><th>Result</th>
+              <th>Wk Pts</th><th>Wk Gap</th>
               <th>Today</th><th>Today vs 2nd</th>
               <th>Yesterday</th><th>Yest vs 2nd</th></tr>
         </thead>
