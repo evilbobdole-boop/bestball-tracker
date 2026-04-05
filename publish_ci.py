@@ -352,6 +352,11 @@ def main():
         opp_idx     = 2 if (my_rank and my_rank <= 2) else 1
         second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
 
+        # Weekly gap
+        my_week_pts  = team_data.get(MY_TEAM, {}).get("weeks", [0.0])[-1] if MY_TEAM in teams else 0.0
+        opp_week_pts = team_data.get(second_team, {}).get("weeks", [0.0])[-1] if second_team else 0.0
+        my_week_gap  = round(my_week_pts - opp_week_pts, 2)
+
         def build_players_ci(team_name):
             players = []
             for p in roster:
@@ -393,6 +398,7 @@ def main():
             "num": num, "sheet": sheet_name, "roster": roster,
             "teams": teams, "data": team_data, "ranked": ranked,
             "my_rank": my_rank, "my_pts": my_pts,
+            "my_week_pts": my_week_pts, "my_week_gap": my_week_gap,
             "my_players": my_players, "my_bench": my_bench,
             "second_team": second_team, "second_players": second_players,
             "second_bench": second_bench, "daily_scores": daily_scores,
