@@ -1117,7 +1117,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local",  action="store_true", help="Skip git push")
     parser.add_argument("--xlsx",   default=str(XLSX_PATH))
-    parser.add_argument("--weeks",  type=int, default=1)
+    parser.add_argument("--weeks",  type=int, default=2)
     args = parser.parse_args()
 
     xlsx = Path(args.xlsx)
