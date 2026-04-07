@@ -556,7 +556,8 @@ tr:hover td { background: #F7F9FC; }
 """
 
 def build_html(drafts, player_analytics, num_weeks, generated_at):
-    wk_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
+    wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
+    wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
     # Aggregate stats
     my_drafts    = [d for d in drafts if MY_TEAM in d["teams"]]
     top2         = sum(1 for d in my_drafts if d["my_rank"] and d["my_rank"] <= 2)
@@ -937,7 +938,6 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     </table></div>"""
 
     # ── PLAYER ANALYTICS (5 tabs: Summary, Daily, P, IF, OF) ──
-    wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
 
     def analytics_table(pos_filter):
         pos_players = [p for p in player_analytics if p["pos"] == pos_filter]
