@@ -241,13 +241,13 @@ def build_bench_ci(roster, team_name, batting, pitching, batting_daily, pitching
         all_players.append({**p, "week_total": wk_total, "weeks": wk_list,
                             "total": round(sum(wk_list), 2), "daily": daily, "yesterday": yest})
 
-    # Find starters (top 3 per pos by week total)
+    # Find starters (top 3 per pos by CURRENT week score)
     starters = set()
     by_pos = {"P": [], "IF": [], "OF": []}
     for p in all_players:
         if p["pos"] in by_pos: by_pos[p["pos"]].append(p)
     for pos, plist in by_pos.items():
-        for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
+        for p in sorted(plist, key=lambda x: x["weeks"][-1] if x["weeks"] else 0, reverse=True)[:3]:
             starters.add(p["name"])
 
     pos_order = {"P": 0, "IF": 1, "OF": 2}
