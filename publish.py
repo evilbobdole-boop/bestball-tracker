@@ -213,7 +213,7 @@ def load_all_drafts(wb, batting, pitching, batting_daily, pitching_daily, latest
             if p["pos"] in by_pos:
                 by_pos[p["pos"]].append(p)
         for pos, plist in by_pos.items():
-            for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
+            for p in sorted(plist, key=lambda x: x["weeks"][-1] if x["weeks"] else 0, reverse=True)[:3]:
                 starters.add(p["name"])
 
         # Bench = everyone not a starter, sorted P/IF/OF then total desc
@@ -495,8 +495,10 @@ tr:hover td { background: #F7F9FC; }
 .rank-cell { text-align: center; width: 36px; font-weight: bold; }
 
 /* MY TEAM ROW */
-.my-row td { background: var(--lgreen) !important; font-weight: bold; }
-.my-row:hover td { background: #d0f5d0 !important; }
+.my-row td { background: #fff9e6 !important; font-weight: bold; }
+.my-row:hover td { background: #fff3cc !important; }
+.my-row-top2 td { background: var(--lgreen) !important; font-weight: bold; }
+.my-row-top2:hover td { background: #d0f5d0 !important; }
 
 /* PLAYER SECTION */
 .player-section { border-top: 3px solid var(--green); }
@@ -586,9 +588,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         gap_str  = (f'<span style="color:#1a7a1a;font-weight:bold">+{gap:.2f}</span>' if gap > 0
                     else f'<span style="color:#b00;font-weight:bold">{gap:.2f}</span>' if gap < 0
                     else "0.00")
-        # Pass/fail = top 2
-        result   = '<span style="color:#1a7a1a;font-weight:bold">✓ PASS</span>' if rank and rank <= 2 else '<span style="color:#b00">✗</span>'
-        me_cls   = "my-row" if MY_TEAM in d["teams"] else ""
+        me_cls   = ("my-row-top2" if rank and rank <= 2 else "my-row") if MY_TEAM in d["teams"] else ""
         # Daily figures for this draft
         my_daily     = d.get("my_daily", 0.0)
         my_daily_gap = d.get("my_daily_gap", 0.0)
@@ -606,7 +606,6 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
           <td class="rank-cell">{ordinal(rank)}</td>
           <td class="num">{second_pts:.2f}</td>
           <td class="num">{gap_str}</td>
-          <td style="text-align:center">{result}</td>
           <td class="num">{my_wk_pts:.2f}</td>
           <td class="num" style="color:{wgap_color};font-weight:bold">{wgap_sign}{my_wk_gap:.2f}</td>
           <td class="num">{my_daily:.2f}</td>
@@ -621,7 +620,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <div class="tbl-scroll"><table>
         <thead>
           <tr><th>Draft</th><th>My Points</th><th>Rank</th>
-              <th>Opp Pts</th><th>Gap to Opp</th><th>Result</th>
+              <th>Opp Pts</th><th>Gap to Opp</th>
               <th>Wk Pts</th><th>Wk Gap</th>
               <th>Today</th><th>Today vs 2nd</th>
               <th>Yesterday</th><th>Yest vs 2nd</th></tr>
@@ -658,15 +657,15 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 daily = p.get("daily", 0.0)
                 yest  = p.get("yesterday", 0.0)
+                wkd_rev = "".join(f'<td class="num">{w:.2f}</td>' for w in reversed(p["weeks"]))
                 p_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td>{p['name']}</td>
                   <td>{p['pos']}</td>
-                  <td>{p['mlb']}</td>
                   <td class="num bold">{p['total']:.2f}</td>
-                  {wkd}
-                  <td class="num" style="color:#888">{yest:.2f}</td>
                   <td class="num" style="color:#1a7a1a;font-weight:bold">{daily:.2f}</td>
+                  <td class="num" style="color:#888">{yest:.2f}</td>
+                  {wkd_rev}
                 </tr>"""
 
             # 2nd place players table
@@ -676,44 +675,44 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 daily = p.get("daily", 0.0)
                 syest = p.get("yesterday", 0.0)
+                wkd_rev_s = "".join(f'<td class="num">{w:.2f}</td>' for w in reversed(p["weeks"]))
                 s_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td>{p['name']}</td>
                   <td>{p['pos']}</td>
-                  <td>{p['mlb']}</td>
                   <td class="num bold">{p['total']:.2f}</td>
-                  {wkd}
-                  <td class="num" style="color:#888">{syest:.2f}</td>
                   <td class="num" style="color:#cc6600;font-weight:bold">{daily:.2f}</td>
+                  <td class="num" style="color:#888">{syest:.2f}</td>
+                  {wkd_rev_s}
                 </tr>"""
 
             # Bench rows
             bench_rows = ""
             for p in d.get("my_bench", []):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
+                wkd_rev_b = "".join(f'<td class="num" style="color:#aaa">{w:.2f}</td>' for w in reversed(p["weeks"]))
                 bench_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td style="color:#666">{p['name']}</td>
                   <td>{p['pos']}</td>
-                  <td>{p['mlb']}</td>
                   <td class="num">{p['total']:.2f}</td>
-                  {wkd}
-                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
                   <td class="num" style="color:#aaa">{p.get('daily',0.0):.2f}</td>
+                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
+                  {wkd_rev_b}
                 </tr>"""
 
             s_bench_rows = ""
             for p in d.get("second_bench", []):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
+                wkd_rev_sb = "".join(f'<td class="num" style="color:#aaa">{w:.2f}</td>' for w in reversed(p["weeks"]))
                 s_bench_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td style="color:#666">{p['name']}</td>
                   <td>{p['pos']}</td>
-                  <td>{p['mlb']}</td>
                   <td class="num">{p['total']:.2f}</td>
-                  {wkd}
-                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
                   <td class="num" style="color:#aaa">{p.get('daily',0.0):.2f}</td>
+                  <td class="num" style="color:#aaa">{p.get('yesterday',0.0):.2f}</td>
+                  {wkd_rev_sb}
                 </tr>"""
 
             # Totals rows
@@ -731,12 +730,12 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                 <div>
                   <div class="player-header">⚾ {MY_TEAM} — Player Scores</div>
                   <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Total</th><th>Today</th><th>Yest</th>{wk_hdrs_rev}</tr></thead>
                     <tbody>{p_rows}
                     <tr style="background:#d0f5d0;font-weight:bold;border-top:2px solid #333">
-                      <td colspan="4">Totals</td>{empty_wk}
-                      <td class="num">{my_yest_tot:.2f}</td>
+                      <td colspan="3">Totals</td>
                       <td class="num">{my_today_tot:.2f}</td>
+                      <td class="num">{my_yest_tot:.2f}</td>
                     </tr>
                     </tbody>
                   </table></div>
@@ -744,12 +743,12 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                 <div style="border-left:2px solid #ccc">
                   <div class="player-header" style="background:#2E75B6">🏆 2nd Place: {second_team}</div>
                   <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Total</th><th>Today</th><th>Yest</th>{wk_hdrs_rev}</tr></thead>
                     <tbody>{s_rows}
                     <tr style="background:#dce8f5;font-weight:bold;border-top:2px solid #333">
-                      <td colspan="4">Totals</td>{empty_wk}
-                      <td class="num">{s_yest_tot:.2f}</td>
+                      <td colspan="3">Totals</td>
                       <td class="num">{s_today_tot:.2f}</td>
+                      <td class="num">{s_yest_tot:.2f}</td>
                     </tr>
                     </tbody>
                   </table></div>
@@ -765,7 +764,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                     📋 {MY_TEAM} — Bench
                   </div>
                   <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Total</th><th>Today</th><th>Yest</th>{wk_hdrs_rev}</tr></thead>
                     <tbody>{bench_rows}</tbody>
                   </table></div>
                 </div>
@@ -774,7 +773,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                     📋 {second_team} — Bench
                   </div>
                   <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>MLB</th><th>Total</th>{wk_hdrs}<th>Yest</th><th>Today</th></tr></thead>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Total</th><th>Today</th><th>Yest</th>{wk_hdrs_rev}</tr></thead>
                     <tbody>{s_bench_rows}</tbody>
                   </table></div>
                 </div>
@@ -825,14 +824,16 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
     wk_cols = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
     # ── SEASON SUMMARY TABLE (used as first analytics tab) ──
     summary_table = f"""
-    <table>
+    <div class="tbl-scroll"><table>
       <thead>
         <tr><th>Draft</th><th>My Points</th><th>Rank</th>
-            <th>2nd Place Pts</th><th>Gap to 2nd</th><th>Result</th>
-            <th>Today</th><th>Daily vs 2nd</th></tr>
+            <th>Opp Pts</th><th>Gap to Opp</th>
+            <th>Wk Pts</th><th>Wk Gap</th>
+            <th>Today</th><th>Today vs 2nd</th>
+            <th>Yesterday</th><th>Yest vs 2nd</th></tr>
       </thead>
       <tbody>{sum_rows}</tbody>
-    </table>"""
+    </table></div>"""
 
     # ── TODAY / YESTERDAY TABLES ──
     _latest    = drafts[0].get("latest_date")    if drafts else None
@@ -897,9 +898,11 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
                         "name": p["name"], "pos": p["pos"], "mlb": p["mlb"],
                         "week_total": 0.0, "drafted": 0
                     }
+                # Use current week score (last week in list) not season total
+                cur_wk = p["weeks"][-1] if p.get("weeks") else 0.0
                 weekly_players[key]["week_total"] = max(
                     weekly_players[key]["week_total"],
-                    p.get("total", 0.0)
+                    cur_wk
                 )
     # Add drafted count
     for d in drafts:
@@ -918,17 +921,17 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         wk_rows += f"""<tr{me_style}>
           <td style="text-align:center;font-weight:bold">{i}</td>
           <td>{p["name"]}</td>
+          <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
           <td>{p["pos"]}</td>
           <td>{p["mlb"]}</td>
           <td class="num" style="font-weight:bold">{p["week_total"]:.2f}</td>
-          <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
         </tr>"""
 
     weekly_table = f"""
     <div class="tbl-scroll"><table>
       <thead><tr>
-        <th>#</th><th>Player</th><th>Pos</th><th>MLB</th>
-        <th>Week Total</th><th>Drafted</th>
+        <th>#</th><th>Player</th><th>Drafted</th><th>Pos</th><th>MLB</th>
+        <th>This Week</th>
       </tr></thead>
       <tbody>{wk_rows}</tbody>
     </table></div>"""
@@ -938,27 +941,28 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
 
     def analytics_table(pos_filter):
         pos_players = [p for p in player_analytics if p["pos"] == pos_filter]
-        pos_players.sort(key=lambda x: x["season_total"], reverse=True)
+        # Sort by current week score (last entry in week_totals)
+        pos_players.sort(key=lambda x: x["week_totals"][-1] if x["week_totals"] else 0, reverse=True)
         rows = ""
         for p in pos_players:
-            wk_tds = "".join(
-                f'<td class="num">{p["week_totals"][w-1] if w <= len(p["week_totals"]) else 0.0:.2f}</td>'
-                for w in range(num_weeks, 0, -1)
-            )
-            rows += f"""<tr>
+            cur_wk = p["week_totals"][-1] if p["week_totals"] else 0.0
+            if cur_wk == 0.0: continue  # hide players with no current week score
+            drafted  = p["drafted_by_me"]
+            me_style = ' style="background:#E6FFE6;font-weight:bold"' if drafted > 0 else ""
+            rows += f"""<tr{me_style}>
               <td>{p["name"]}</td>
-              <td style="text-align:center">{p["drafted_by_me"]}</td>
+              <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
               <td style="text-align:center">{p["cashing"]}</td>
-              <td class="num bold">{p["season_total"]:.2f}</td>
-              {wk_tds}
+              <td class="num bold">{cur_wk:.2f}</td>
+              <td class="num" style="color:#888">{p["season_total"]:.2f}</td>
             </tr>"""
         return f"""
-        <table>
+        <div class="tbl-scroll"><table>
           <thead><tr>
-            <th>Player</th><th>Drafted</th><th>Cashing</th><th>Season</th>{wk_hdrs_rev}
+            <th>Player</th><th>Drafted</th><th>Cashing</th><th>This Week</th><th>Season</th>
           </tr></thead>
           <tbody>{rows}</tbody>
-        </table>"""
+        </table></div>"""
 
     analytics_section = f"""
     <div id="analytics" class="summary" style="margin-top:24px">
