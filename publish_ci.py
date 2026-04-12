@@ -16,6 +16,7 @@ MY_TEAM      = "evilbobdole"
 SEASON_START = date(2026, 3, 25)
 WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
 WEEK2_END    = date(2026, 4, 12)  # Week 2: Apr 6 - Apr 12
+WEEK3_END    = date(2026, 4, 19)  # Week 3: Apr 13 - Apr 19
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -28,8 +29,9 @@ def week_num(d: date) -> int:
     if d < SEASON_START: return 0
     if d <= WEEK1_END:   return 1
     if d <= WEEK2_END:   return 2
-    delta = (d - (WEEK2_END + timedelta(days=1))).days
-    return 3 + delta // 7
+    if d <= WEEK3_END:   return 3
+    delta = (d - (WEEK3_END + timedelta(days=1))).days
+    return 4 + delta // 7
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
