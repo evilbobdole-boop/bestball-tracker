@@ -314,7 +314,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=2)
+    parser.add_argument("--weeks", type=int, default=3)
     args = parser.parse_args()
 
     print("Loading rosters...")
