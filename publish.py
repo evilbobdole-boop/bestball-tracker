@@ -55,8 +55,8 @@ def load_stats(wb):
     pitching_daily = {}   # (date_str, name, team) -> dk pts
 
     ds = wb["Daily Stats"]
-    # Use sheet max_row but also read all rows regardless of gaps
-    for row in ds.iter_rows(min_row=2, max_row=ds.max_row, values_only=True):
+    # Use a large fixed max_row to avoid stale metadata issues
+    for row in ds.iter_rows(min_row=2, max_row=99999, values_only=True):
         # Skip completely empty rows or the instruction placeholder row
         if row[2] is None or row[1] is None: continue
         name_str = str(row[2]).strip()
@@ -77,7 +77,7 @@ def load_stats(wb):
             continue
 
     ps = wb["Pitching Stats"]
-    for row in ps.iter_rows(min_row=2, max_row=ps.max_row, values_only=True):
+    for row in ps.iter_rows(min_row=2, max_row=99999, values_only=True):
         if row[2] is None or row[1] is None: continue
         name_str = str(row[2]).strip()
         if not name_str or name_str.startswith("←"): continue
