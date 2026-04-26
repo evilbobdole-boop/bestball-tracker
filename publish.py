@@ -555,7 +555,7 @@ tr:hover td { background: #F7F9FC; }
 }
 """
 
-def build_html(drafts, player_analytics, num_weeks, generated_at):
+def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
     wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
     wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
     # Aggregate stats
@@ -937,6 +937,120 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <tbody>{wk_rows}</tbody>
     </table></div>"""
 
+    # ── SEASON TABLE ──
+    import csv, unicodedata as _uc
+    def _strip(n):
+        return "".join(c for c in _uc.normalize("NFD", str(n)) if _uc.category(c) != "Mn")
+
+    # Load ADP data
+    adp_data = {}  # name -> {adp, pos_rank}
+    adp_paths = [
+        Path(str(xlsx)).parent / "DkPreDraftRankings_12_.csv",
+        Path("DkPreDraftRankings_12_.csv"),
+    ]
+    for adp_path in adp_paths:
+        if adp_path.exists():
+            try:
+                with open(adp_path, newline="", encoding="utf-8") as f_adp:
+                    reader = csv.DictReader(f_adp)
+                    rows_by_pos = {"OF": [], "IF": [], "P": []}
+                    for row in reader:
+                        pos = str(row.get("Position","")).strip()
+                        if pos in rows_by_pos:
+                            try:
+                                rows_by_pos[pos].append({
+                                    "name": _strip(str(row["Name"]).strip()),
+                                    "adp":  round(float(row["ADP"]), 1)
+                                })
+                            except: pass
+                    for pos, plist in rows_by_pos.items():
+                        for rank, p in enumerate(sorted(plist, key=lambda x: x["adp"]), 1):
+                            adp_data[p["name"]] = {"adp": p["adp"], "pos_rank": rank, "pos": pos}
+            except Exception as e:
+                print(f"  ADP load warning: {e}")
+            break
+
+    # Position colors
+    pos_colors = {"P": "#EAF2FB", "IF": "#FFF0E8", "OF": "#F0F8EE"}
+
+    # Build all players with season totals and weekly breakdown
+    season_players = {}
+    for d in drafts:
+        for plist in [d.get("my_players",[]), d.get("second_players",[]),
+                      d.get("my_bench",[]),   d.get("second_bench",[])]:
+            for p in plist:
+                key = (_strip(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
+                if key not in season_players:
+                    season_players[key] = {
+                        "name": p["name"], "pos": p["pos"], "mlb": p["mlb"],
+                        "total": 0.0, "weeks": [], "drafted": 0
+                    }
+                season_players[key]["total"]  = max(season_players[key]["total"], p.get("total", 0.0))
+                if len(p.get("weeks",[])) > len(season_players[key]["weeks"]):
+                    season_players[key]["weeks"] = p.get("weeks", [])
+
+    # Add drafted count
+    for d in drafts:
+        for p in d["roster"]:
+            if p["team_name"] != MY_TEAM: continue
+            key = (_strip(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
+            if key in season_players:
+                season_players[key]["drafted"] = season_players[key].get("drafted", 0) + 1
+
+    # Sort: by pos (P/IF/OF) then season total desc
+    pos_order = {"P": 0, "IF": 1, "OF": 2}
+    sorted_season = sorted(season_players.values(),
+                           key=lambda x: (pos_order.get(x["pos"], 9), -x["total"]))
+
+    # Compute overall rank and per-position rank
+    overall_ranked = sorted(season_players.values(), key=lambda x: -x["total"])
+    overall_rank_map = {(_strip(p["name"]), p["pos"]): i+1
+                        for i, p in enumerate(overall_ranked)}
+    pos_ranked = {}
+    for pos in ["P", "IF", "OF"]:
+        pos_list = sorted((p for p in season_players.values() if p["pos"]==pos),
+                          key=lambda x: -x["total"])
+        for i, p in enumerate(pos_list):
+            pos_ranked[(_strip(p["name"]), p["pos"])] = i+1
+
+    # Week headers reversed (current week first)
+    wk_season_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
+
+    season_rows = ""
+    for p in sorted_season:
+        if p["total"] == 0.0: continue
+        key_lookup  = _strip(p["name"])
+        adp_info    = adp_data.get(key_lookup, {})
+        adp_val     = f"{adp_info.get('adp', '—')}" if adp_info else "—"
+        pos_rank    = pos_ranked.get((_strip(p["name"]), p["pos"]), "—")
+        overall_rnk = overall_rank_map.get((_strip(p["name"]), p["pos"]), "—")
+        drafted     = p.get("drafted", 0)
+        bg_color    = pos_colors.get(p["pos"], "#fff")
+        me_style    = f' style="background:#E6FFE6;font-weight:bold"' if drafted > 0 else f' style="background:{bg_color}"'
+        wk_tds      = "".join(
+            f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>—</td>'
+            for w in range(num_weeks, 0, -1)
+        )
+        season_rows += f"""<tr{me_style}>
+          <td style="text-align:center">{overall_rnk}</td>
+          <td>{p["name"]}</td>
+          <td style="text-align:center">{p["pos"]}</td>
+          <td style="text-align:center">{pos_rank}</td>
+          <td style="text-align:center">{adp_val}</td>
+          <td class="num bold">{p["total"]:.2f}</td>
+          <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
+          {wk_tds}
+        </tr>"""
+
+    season_table = f"""
+    <div class="tbl-scroll"><table>
+      <thead><tr>
+        <th>#</th><th>Player</th><th>Pos</th><th>Pos Rank</th><th>ADP</th>
+        <th>Season</th><th>Drafted</th>{wk_season_hdrs}
+      </tr></thead>
+      <tbody>{season_rows}</tbody>
+    </table></div>"""
+
     # ── PLAYER ANALYTICS (5 tabs: Summary, Daily, P, IF, OF) ──
 
     def analytics_table(pos_filter):
@@ -973,6 +1087,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
         <button class="tab-btn" onclick="showAnalyticsTab('P',this)">⚾ Pitchers</button>
         <button class="tab-btn" onclick="showAnalyticsTab('IF',this)">🏃 Infielders</button>
         <button class="tab-btn" onclick="showAnalyticsTab('OF',this)">🌴 Outfielders</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('SEASON',this)">📊 Season</button>
         <button class="tab-btn" onclick="showAnalyticsTab('TODAY',this)">📅 Today</button>
         <button class="tab-btn" onclick="showAnalyticsTab('YEST',this)">📅 Yesterday</button>
       </div>
@@ -980,8 +1095,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at):
       <div id="atab-WK"    class="atab">{weekly_table}</div>
       <div id="atab-P"     class="atab">{analytics_table("P")}</div>
       <div id="atab-IF"    class="atab">{analytics_table("IF")}</div>
-      <div id="atab-OF"    class="atab">{analytics_table("OF")}</div>
-      <div id="atab-TODAY" class="atab">{today_table}</div>
+      <div id="atab-OF"     class="atab">{analytics_table("OF")}</div>
+      <div id="atab-SEASON" class="atab">{season_table}</div>
+      <div id="atab-TODAY"  class="atab">{today_table}</div>
       <div id="atab-YEST"  class="atab">{yest_table}</div>
     </div>"""
 
@@ -1136,7 +1252,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local",  action="store_true", help="Skip git push")
     parser.add_argument("--xlsx",   default=str(XLSX_PATH))
-    parser.add_argument("--weeks",  type=int, default=4)
+    parser.add_argument("--weeks",  type=int, default=5)
     args = parser.parse_args()
 
     xlsx = Path(args.xlsx)
@@ -1198,7 +1314,7 @@ def main():
     _tz_lbl  = "EDT" if _is_dst else "EST"
     generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
     print("Building HTML...")
-    html = build_html(drafts, player_analytics, args.weeks, generated_at)
+    html = build_html(drafts, player_analytics, args.weeks, generated_at, xlsx=xlsx)
 
     out = Path("index.html") if args.local else REPO_DIR / "index.html"
     out.write_text(html, encoding="utf-8")
