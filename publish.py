@@ -983,19 +983,22 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
                 if key not in season_players:
                     season_players[key] = {
                         "name": p["name"], "pos": p["pos"], "mlb": p["mlb"],
-                        "total": 0.0, "weeks": [], "drafted": 0
+                        "total": 0.0, "weeks": [], "drafted": 0, "cashing": 0
                     }
                 season_players[key]["total"]  = max(season_players[key]["total"], p.get("total", 0.0))
                 if len(p.get("weeks",[])) > len(season_players[key]["weeks"]):
                     season_players[key]["weeks"] = p.get("weeks", [])
 
-    # Add drafted count
+    # Add drafted count and cashing count
     for d in drafts:
+        top2_teams = set(d["ranked"][:2]) if len(d["ranked"]) >= 2 else set(d["ranked"])
         for p in d["roster"]:
-            if p["team_name"] != MY_TEAM: continue
             key = (_strip(p["name"]), str(p["mlb"]).upper().replace("AZ","ARI"), p["pos"])
-            if key in season_players:
+            if key not in season_players: continue
+            if p["team_name"] == MY_TEAM:
                 season_players[key]["drafted"] = season_players[key].get("drafted", 0) + 1
+            if p["team_name"] in top2_teams:
+                season_players[key]["cashing"] = season_players[key].get("cashing", 0) + 1
 
     # Sort: by pos (P/IF/OF) then season total desc
     pos_order = {"P": 0, "IF": 1, "OF": 2}
@@ -1039,14 +1042,52 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
           <td style="text-align:center">{adp_val}</td>
           <td class="num bold">{p["total"]:.2f}</td>
           <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
+          <td style="text-align:center">{p.get("cashing", 0) if p.get("cashing", 0) > 0 else ""}</td>
           {wk_tds}
         </tr>"""
+
+    # ── OVERALL TABLE (all players sorted by season total, pos color coded) ──
+    overall_colors = {"P": "#ffcccc", "IF": "#ffffcc", "OF": "#ccffcc"}  # red/yellow/green tints
+    overall_rows = ""
+    for i, p in enumerate(sorted(season_players.values(), key=lambda x: -x["total"]), 1):
+        if p["total"] == 0.0: continue
+        drafted  = p.get("drafted", 0)
+        cashing  = p.get("cashing", 0)
+        bg       = "#E6FFE6" if drafted > 0 else overall_colors.get(p["pos"], "#fff")
+        wk_tds_o = "".join(
+            f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>—</td>'
+            for w in range(num_weeks, 0, -1)
+        )
+        overall_rows += f"""<tr style="background:{bg}">
+          <td style="text-align:center;font-weight:bold">{i}</td>
+          <td>{p["name"]}</td>
+          <td style="text-align:center">{p["pos"]}</td>
+          <td class="num bold">{p["total"]:.2f}</td>
+          <td style="text-align:center">{"★ " + str(drafted) if drafted > 0 else ""}</td>
+          <td style="text-align:center">{cashing if cashing > 0 else ""}</td>
+          {wk_tds_o}
+        </tr>"""
+
+    overall_table = f"""
+    <div style="padding:8px 12px;font-size:12px;display:flex;gap:16px;background:#f8f8f8;border-bottom:1px solid #ddd">
+      <span style="background:#ffcccc;padding:2px 8px;border-radius:4px">■ Pitcher</span>
+      <span style="background:#ffffcc;padding:2px 8px;border-radius:4px">■ Infielder</span>
+      <span style="background:#ccffcc;padding:2px 8px;border-radius:4px">■ Outfielder</span>
+      <span style="background:#E6FFE6;padding:2px 8px;border-radius:4px">★ Drafted by me</span>
+    </div>
+    <div class="tbl-scroll"><table>
+      <thead><tr>
+        <th>#</th><th>Player</th><th>Pos</th><th>Season</th>
+        <th>Drafted</th><th>Cashing</th>{wk_season_hdrs}
+      </tr></thead>
+      <tbody>{overall_rows}</tbody>
+    </table></div>"""
 
     season_table = f"""
     <div class="tbl-scroll"><table>
       <thead><tr>
         <th>#</th><th>Player</th><th>Pos</th><th>Pos Rank</th><th>ADP</th>
-        <th>Season</th><th>Drafted</th>{wk_season_hdrs}
+        <th>Season</th><th>Drafted</th><th>Cashing</th>{wk_season_hdrs}
       </tr></thead>
       <tbody>{season_rows}</tbody>
     </table></div>"""
@@ -1088,6 +1129,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
         <button class="tab-btn" onclick="showAnalyticsTab('IF',this)">🏃 Infielders</button>
         <button class="tab-btn" onclick="showAnalyticsTab('OF',this)">🌴 Outfielders</button>
         <button class="tab-btn" onclick="showAnalyticsTab('SEASON',this)">📊 Season</button>
+        <button class="tab-btn" onclick="showAnalyticsTab('OVERALL',this)">🏅 Overall</button>
         <button class="tab-btn" onclick="showAnalyticsTab('TODAY',this)">📅 Today</button>
         <button class="tab-btn" onclick="showAnalyticsTab('YEST',this)">📅 Yesterday</button>
       </div>
@@ -1096,8 +1138,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
       <div id="atab-P"     class="atab">{analytics_table("P")}</div>
       <div id="atab-IF"    class="atab">{analytics_table("IF")}</div>
       <div id="atab-OF"     class="atab">{analytics_table("OF")}</div>
-      <div id="atab-SEASON" class="atab">{season_table}</div>
-      <div id="atab-TODAY"  class="atab">{today_table}</div>
+      <div id="atab-SEASON"  class="atab">{season_table}</div>
+      <div id="atab-OVERALL" class="atab">{overall_table}</div>
+      <div id="atab-TODAY"   class="atab">{today_table}</div>
       <div id="atab-YEST"  class="atab">{yest_table}</div>
     </div>"""
 
