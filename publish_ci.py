@@ -18,6 +18,7 @@ WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
 WEEK2_END    = date(2026, 4, 12)  # Week 2: Apr 6 - Apr 12
 WEEK3_END    = date(2026, 4, 19)  # Week 3: Apr 13 - Apr 19
 WEEK4_END    = date(2026, 4, 26)  # Week 4: Apr 20 - Apr 26
+WEEK5_END    = date(2026, 5, 3)   # Week 5: Apr 27 - May 3
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -32,8 +33,9 @@ def week_num(d: date) -> int:
     if d <= WEEK2_END:   return 2
     if d <= WEEK3_END:   return 3
     if d <= WEEK4_END:   return 4
-    delta = (d - (WEEK4_END + timedelta(days=1))).days
-    return 5 + delta // 7
+    if d <= WEEK5_END:   return 5
+    delta = (d - (WEEK5_END + timedelta(days=1))).days
+    return 6 + delta // 7
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -316,7 +318,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=4)
+    parser.add_argument("--weeks", type=int, default=5)
     args = parser.parse_args()
 
     print("Loading rosters...")
@@ -460,7 +462,7 @@ def main():
     _tz_lbl  = "EDT" if _is_dst else "EST"
     generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
     print("Building HTML...")
-    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
+    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at, xlsx=Path("DkPreDraftRankings_12_.csv").parent)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")
