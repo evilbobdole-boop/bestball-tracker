@@ -1,0 +1,42 @@
+name: Update MLB Best Ball Scores
+
+on:
+  schedule:
+    - cron: '0,15,30,45 17-23 * * *'   # 1pm-7pm ET (game hours)
+    - cron: '0,15,30,45 0-4 * * *'     # 7pm-midnight ET (late games)
+    - cron: '0 14 * * *'               # 10am ET daily (catch overnight finals)
+    - cron: '0 14 * * 1'               # 10am ET every Monday (new week rollover)
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests openpyxl pytz
+
+      - name: Generate leaderboard HTML
+        run: python publish_ci.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html stats_cache.json || true
+          git diff --staged --quiet || git commit -m "Auto-update scores $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
