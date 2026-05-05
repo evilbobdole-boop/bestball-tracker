@@ -19,6 +19,7 @@ WEEK2_END    = date(2026, 4, 12)  # Week 2: Apr 6 - Apr 12
 WEEK3_END    = date(2026, 4, 19)  # Week 3: Apr 13 - Apr 19
 WEEK4_END    = date(2026, 4, 26)  # Week 4: Apr 20 - Apr 26
 WEEK5_END    = date(2026, 5, 3)   # Week 5: Apr 27 - May 3
+WEEK6_END    = date(2026, 5, 10)  # Week 6: May 4 - May 10
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -34,8 +35,9 @@ def week_num(d: date) -> int:
     if d <= WEEK3_END:   return 3
     if d <= WEEK4_END:   return 4
     if d <= WEEK5_END:   return 5
-    delta = (d - (WEEK5_END + timedelta(days=1))).days
-    return 6 + delta // 7
+    if d <= WEEK6_END:   return 6
+    delta = (d - (WEEK6_END + timedelta(days=1))).days
+    return 7 + delta // 7
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -318,7 +320,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=5)
+    parser.add_argument("--weeks", type=int, default=6)
     args = parser.parse_args()
 
     print("Loading rosters...")
