@@ -1053,7 +1053,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
         if p["total"] == 0.0: continue
         drafted  = p.get("drafted", 0)
         cashing  = p.get("cashing", 0)
-        bg       = "#E6FFE6" if drafted > 0 else overall_colors.get(p["pos"], "#fff")
+        bg       = overall_colors.get(p["pos"], "#fff")  # always position color
         wk_tds_o = "".join(
             f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>—</td>'
             for w in range(num_weeks, 0, -1)
@@ -1295,7 +1295,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local",  action="store_true", help="Skip git push")
     parser.add_argument("--xlsx",   default=str(XLSX_PATH))
-    parser.add_argument("--weeks",  type=int, default=5)
+    parser.add_argument("--weeks",  type=int, default=6)
     args = parser.parse_args()
 
     xlsx = Path(args.xlsx)
