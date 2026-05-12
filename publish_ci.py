@@ -20,6 +20,7 @@ WEEK3_END    = date(2026, 4, 19)  # Week 3: Apr 13 - Apr 19
 WEEK4_END    = date(2026, 4, 26)  # Week 4: Apr 20 - Apr 26
 WEEK5_END    = date(2026, 5, 3)   # Week 5: Apr 27 - May 3
 WEEK6_END    = date(2026, 5, 10)  # Week 6: May 4 - May 10
+WEEK7_END    = date(2026, 5, 17)  # Week 7: May 11 - May 17
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -36,8 +37,9 @@ def week_num(d: date) -> int:
     if d <= WEEK4_END:   return 4
     if d <= WEEK5_END:   return 5
     if d <= WEEK6_END:   return 6
-    delta = (d - (WEEK6_END + timedelta(days=1))).days
-    return 7 + delta // 7
+    if d <= WEEK7_END:   return 7
+    delta = (d - (WEEK7_END + timedelta(days=1))).days
+    return 8 + delta // 7
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -135,6 +137,17 @@ def fetch_stats_for_date(d: date):
 def load_all_stats():
     today = date.today(); yesterday = today - timedelta(days=1)
     all_batting = {}; all_pitching = {}
+
+    # On Mondays, clear cache to force full re-fetch for new week
+    import time as _t
+    from datetime import timezone, timedelta as _tde
+    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
+    _now_est  = datetime.utcnow() + _est_off
+    if _now_est.weekday() == 0:  # Monday
+        cache_file_check = Path("stats_cache.json")
+        if cache_file_check.exists():
+            cache_file_check.unlink()
+            print("  Monday — cache cleared for new week re-fetch.")
 
     # Load cache
     cache_file = Path("stats_cache.json"); cached_dates = set()
@@ -320,7 +333,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=6)
+    parser.add_argument("--weeks", type=int, default=7)
     args = parser.parse_args()
 
     print("Loading rosters...")
