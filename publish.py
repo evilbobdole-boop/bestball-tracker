@@ -556,8 +556,10 @@ tr:hover td { background: #F7F9FC; }
 """
 
 def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
-    wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in range(1, num_weeks + 1))
-    wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
+    # Show only the last 5 weeks in tables to keep them manageable
+    display_weeks = list(range(max(1, num_weeks - 4), num_weeks + 1))  # e.g. wks 4-8 when on week 8
+    wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in display_weeks)
+    wk_hdrs_rev = "".join(f"<th>Wk {w}</th>" for w in reversed(display_weeks))
     # Aggregate stats
     my_drafts    = [d for d in drafts if MY_TEAM in d["teams"]]
     top2         = sum(1 for d in my_drafts if d["my_rank"] and d["my_rank"] <= 2)
@@ -638,7 +640,8 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
         for rank, team in enumerate(d["ranked"], 1):
             sc      = d["data"].get(team, {})
             total   = sc.get("total", 0.0)
-            weeks   = "".join(f'<td class="num">{w:.2f}</td>' for w in sc.get("weeks", []))
+            weeks_list = sc.get("weeks", [])
+            weeks   = "".join(f'<td class="num">{weeks_list[w-1]:.2f}</td>' if w <= len(weeks_list) else '<td>0.00</td>' for w in reversed(display_weeks))
             r_cls   = f"r{rank}" if rank in (1,2,3) else ""
             me_cls  = "my-row" if team == MY_TEAM else ""
             ldr_rows += f"""
@@ -658,7 +661,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 daily = p.get("daily", 0.0)
                 yest  = p.get("yesterday", 0.0)
-                wkd_rev = "".join(f'<td class="num">{w:.2f}</td>' for w in reversed(p["weeks"]))
+                wkd_rev = "".join(f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>0.00</td>' for w in reversed(display_weeks))
                 p_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td>{p['name']}</td>
@@ -676,7 +679,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
                 daily = p.get("daily", 0.0)
                 syest = p.get("yesterday", 0.0)
-                wkd_rev_s = "".join(f'<td class="num">{w:.2f}</td>' for w in reversed(p["weeks"]))
+                wkd_rev_s = "".join(f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>0.00</td>' for w in reversed(display_weeks))
                 s_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td>{p['name']}</td>
@@ -691,7 +694,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
             bench_rows = ""
             for p in d.get("my_bench", []):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
-                wkd_rev_b = "".join(f'<td class="num" style="color:#aaa">{w:.2f}</td>' for w in reversed(p["weeks"]))
+                wkd_rev_b = "".join(f'<td class="num" style="color:#aaa">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>0.00</td>' for w in reversed(display_weeks))
                 bench_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td style="color:#666">{p['name']}</td>
@@ -705,7 +708,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
             s_bench_rows = ""
             for p in d.get("second_bench", []):
                 wkd   = "".join(f'<td class="num">{w:.2f}</td>' for w in p["weeks"])
-                wkd_rev_sb = "".join(f'<td class="num" style="color:#aaa">{w:.2f}</td>' for w in reversed(p["weeks"]))
+                wkd_rev_sb = "".join(f'<td class="num" style="color:#aaa">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>0.00</td>' for w in reversed(display_weeks))
                 s_bench_rows += f"""
                 <tr class="pos-{p['pos']}">
                   <td style="color:#666">{p['name']}</td>
@@ -1017,7 +1020,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
             pos_ranked[(_strip(p["name"]), p["pos"])] = i+1
 
     # Week headers reversed (current week first)
-    wk_season_hdrs = "".join(f"<th>Wk {w}</th>" for w in range(num_weeks, 0, -1))
+    wk_season_hdrs = "".join(f"<th>Wk {w}</th>" for w in reversed(display_weeks))
 
     season_rows = ""
     for p in sorted_season:
@@ -1032,7 +1035,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
         me_style    = f' style="background:#E6FFE6;font-weight:bold"' if drafted > 0 else f' style="background:{bg_color}"'
         wk_tds      = "".join(
             f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>—</td>'
-            for w in range(num_weeks, 0, -1)
+            for w in reversed(display_weeks)
         )
         season_rows += f"""<tr{me_style}>
           <td style="text-align:center">{overall_rnk}</td>
@@ -1056,7 +1059,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
         bg       = overall_colors.get(p["pos"], "#fff")  # always position color
         wk_tds_o = "".join(
             f'<td class="num">{p["weeks"][w-1]:.2f}</td>' if w <= len(p["weeks"]) else '<td>—</td>'
-            for w in range(num_weeks, 0, -1)
+            for w in reversed(display_weeks)
         )
         overall_rows += f"""<tr style="background:{bg}">
           <td style="text-align:center;font-weight:bold">{i}</td>
@@ -1295,7 +1298,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local",  action="store_true", help="Skip git push")
     parser.add_argument("--xlsx",   default=str(XLSX_PATH))
-    parser.add_argument("--weeks",  type=int, default=6)
+    # Auto-detect current week from today's date
+    import time as _t2
+    from datetime import date as _d2, timedelta as _td2
+    _SEASON_START = _d2(2026, 3, 25)
+    _WEEK1_END    = _d2(2026, 4, 5)
+    _est2 = _td2(hours=-4) if (_t2.daylight and _t2.localtime().tm_isdst) else _td2(hours=-5)
+    _today_est = (datetime.utcnow() + _est2).date()
+    def _wn(d):
+        if d < _SEASON_START: return 0
+        if d <= _WEEK1_END: return 1
+        return 2 + (d - (_WEEK1_END + _td2(days=1))).days // 7
+    _auto_weeks = _wn(_today_est)
+    parser.add_argument("--weeks",  type=int, default=_auto_weeks)
     args = parser.parse_args()
 
     xlsx = Path(args.xlsx)
