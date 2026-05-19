@@ -15,12 +15,6 @@ from pathlib import Path
 MY_TEAM      = "evilbobdole"
 SEASON_START = date(2026, 3, 25)
 WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
-WEEK2_END    = date(2026, 4, 12)  # Week 2: Apr 6 - Apr 12
-WEEK3_END    = date(2026, 4, 19)  # Week 3: Apr 13 - Apr 19
-WEEK4_END    = date(2026, 4, 26)  # Week 4: Apr 20 - Apr 26
-WEEK5_END    = date(2026, 5, 3)   # Week 5: Apr 27 - May 3
-WEEK6_END    = date(2026, 5, 10)  # Week 6: May 4 - May 10
-WEEK7_END    = date(2026, 5, 17)  # Week 7: May 11 - May 17
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -30,16 +24,14 @@ def strip_accents(name: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 def week_num(d: date) -> int:
+    """Dynamic week calculation — no hardcoded week boundaries needed.
+    Week 1 = Mar 25 - Apr 5 (12 days), then 7-day weeks from Apr 6 onward.
+    Automatically handles any future week without code changes."""
     if d < SEASON_START: return 0
     if d <= WEEK1_END:   return 1
-    if d <= WEEK2_END:   return 2
-    if d <= WEEK3_END:   return 3
-    if d <= WEEK4_END:   return 4
-    if d <= WEEK5_END:   return 5
-    if d <= WEEK6_END:   return 6
-    if d <= WEEK7_END:   return 7
-    delta = (d - (WEEK7_END + timedelta(days=1))).days
-    return 8 + delta // 7
+    delta = (d - (WEEK1_END + timedelta(days=1))).days
+    return 2 + delta // 7
+
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -333,7 +325,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=7)
+    # Auto-detect current week from today's date
+    import time as _t2
+    from datetime import timedelta as _td2
+    _est2 = timedelta(hours=-4) if (_t2.daylight and _t2.localtime().tm_isdst) else timedelta(hours=-5)
+    _today_est = (datetime.utcnow() + _est2).date()
+    _auto_weeks = week_num(_today_est)
+    parser.add_argument("--weeks", type=int, default=_auto_weeks)
     args = parser.parse_args()
 
     print("Loading rosters...")
