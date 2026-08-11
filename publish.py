@@ -555,7 +555,7 @@ tr:hover td { background: #F7F9FC; }
 }
 """
 
-def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
+def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, champ_draft=None):
     # Show only the last 5 weeks in tables to keep them manageable
     display_weeks = list(range(max(1, num_weeks - 4), num_weeks + 1))  # e.g. wks 4-8 when on week 8
     wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in display_weeks)
@@ -633,7 +633,105 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
     </div>"""
 
     # ── PER-DRAFT CARDS ──
-    draft_cards = ""
+    # Build championship card HTML
+    champ_html = ""
+    if champ_draft:
+        from datetime import date as _date
+        cd        = champ_draft
+        c_ranked  = cd["ranked"]
+        c_data    = cd["data"]
+        c_period  = f"{cd.get('champ_start','Aug 10')} to {cd.get('champ_end','Aug 23')}"
+        c_active  = cd.get("champ_active", False)
+        today_val = _date.today()
+        status    = "🟢 Active" if c_active else ("⏳ Upcoming" if today_val < _date(2026,8,10) else "✅ Complete")
+
+        c_ldr_rows = ""
+        for rank, team in enumerate(c_ranked, 1):
+            total  = c_data.get(team,{}).get("total",0.0)
+            r_cls  = f"r{rank}" if rank in (1,2,3) else ""
+            me_cls = "my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
+            c_ldr_rows += f'<tr class="{r_cls} {me_cls}"><td>{rank}</td><td>{team}</td><td class="num bold">{total:.2f}</td></tr>'
+
+        def champ_starter_rows(players, tot_bg):
+            rows = ""
+            for p in players:
+                rows += f'<tr><td>{p["name"]}</td><td>{p["pos"]}</td><td class="num bold">{p["total"]:.2f}</td><td class="num" style="color:#1a7a1a">{p.get("daily",0):.2f}</td><td class="num" style="color:#888">{p.get("yesterday",0):.2f}</td></tr>'
+            tot = sum(p["total"] for p in players)
+            rows += f'<tr style="background:{tot_bg};font-weight:bold"><td colspan="2">Total</td><td class="num">{tot:.2f}</td><td></td><td></td></tr>'
+            return rows
+
+        def champ_bench_html(players):
+            rows = ""
+            for p in players:
+                rows += f'<tr style="color:#666"><td>{p["name"]}</td><td>{p["pos"]}</td><td class="num">{p["total"]:.2f}</td><td class="num" style="color:#aaa">{p.get("daily",0):.2f}</td><td class="num" style="color:#aaa">{p.get("yesterday",0):.2f}</td></tr>'
+            return rows
+
+        my_rows     = champ_starter_rows(cd["my_players"], "#d0f5d0")
+        opp_rows    = champ_starter_rows(cd["second_players"], "#dce8f5")
+        my_b_rows   = champ_bench_html(cd["my_bench"])
+        opp_b_rows  = champ_bench_html(cd["second_bench"])
+        gap         = round(cd["my_pts"] - c_data.get(cd["second_team"],{}).get("total",0.0), 2)
+        gap_col     = "#1a7a1a" if gap >= 0 else "#b00"
+        gap_sign    = "+" if gap >= 0 else ""
+        dgap_col    = "#1a7a1a" if cd["my_daily_gap"] >= 0 else "#b00"
+        dgap_sign   = "+" if cd["my_daily_gap"] >= 0 else ""
+        opp_total   = c_data.get(cd["second_team"],{}).get("total",0.0)
+
+        champ_html = f"""
+        <div id="championship" class="draft-card" style="border:3px solid #c8a020;margin-bottom:32px">
+          <div style="background:linear-gradient(135deg,#2c1810,#8B6914);color:#FFD700;padding:12px 20px;display:flex;justify-content:space-between;align-items:center">
+            <div><span style="font-size:20px;font-weight:bold">🏆 CHAMPIONSHIP</span>
+            <span style="font-size:12px;margin-left:12px;opacity:0.85">Scoring period: {c_period}</span></div>
+            <span style="font-size:13px">{status}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:0">
+            <div style="padding:12px;min-width:180px">
+              <div style="font-weight:bold;font-size:12px;margin-bottom:6px;color:#8B6914">STANDINGS</div>
+              <div class="tbl-scroll"><table>
+                <thead><tr><th>#</th><th>Team</th><th>Points</th></tr></thead>
+                <tbody>{c_ldr_rows}</tbody>
+              </table></div>
+            </div>
+            <div style="border-left:2px solid #e8d080;padding:12px">
+              <div style="display:flex;gap:20px;font-size:12px;margin-bottom:8px;flex-wrap:wrap">
+                <span>EBD: <strong>{cd["my_pts"]:.2f}</strong></span>
+                <span>vs {cd["second_team"]}: <strong>{opp_total:.2f}</strong></span>
+                <span>Gap: <strong style="color:{gap_col}">{gap_sign}{gap:.2f}</strong></span>
+                <span>Today gap: <strong style="color:{dgap_col}">{dgap_sign}{cd["my_daily_gap"]:.2f}</strong></span>
+              </div>
+              <div class="side-by-side" style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+                <div>
+                  <div style="background:#2c7a2c;color:#fff;padding:4px 12px;font-size:12px;font-weight:bold">⭐ EBD — Starters</div>
+                  <div class="tbl-scroll"><table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
+                    <tbody>{my_rows}</tbody></table></div>
+                </div>
+                <div style="border-left:2px solid #ccc">
+                  <div style="background:#5a7fa8;color:#fff;padding:4px 12px;font-size:12px;font-weight:bold">📋 {cd["second_team"]} — Starters</div>
+                  <div class="tbl-scroll"><table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
+                    <tbody>{opp_rows}</tbody></table></div>
+                </div>
+              </div>
+              <div class="side-by-side" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:2px solid #aaa;margin-top:8px">
+                <div>
+                  <div style="background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold">📋 EBD — Bench</div>
+                  <div class="tbl-scroll"><table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
+                    <tbody>{my_b_rows}</tbody></table></div>
+                </div>
+                <div style="border-left:2px solid #ccc">
+                  <div style="background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold">📋 {cd["second_team"]} — Bench</div>
+                  <div class="tbl-scroll"><table>
+                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
+                    <tbody>{opp_b_rows}</tbody></table></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>"""
+
+    draft_cards = champ_html
     for d in drafts:
         # Leaderboard rows
         ldr_rows = ""
@@ -813,8 +911,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None):
 
     # ── FULL PAGE ──
     # ── NAV ──
-    nav_links = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
-    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#summary">Summary</a>{nav_links}</nav>'
+    champ_nav  = '<a href="#championship" style="color:#FFD700;font-weight:bold">🏆 Champ</a>' if champ_draft else ''
+    nav_links  = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
+    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#analytics">Summary</a>{champ_nav}{nav_links}</nav>'
 
     pills = f"""
     <div class="pills">

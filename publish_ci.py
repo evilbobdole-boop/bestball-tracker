@@ -12,9 +12,12 @@ import requests
 from datetime import date, timedelta, datetime
 from pathlib import Path
 
-MY_TEAM      = "evilbobdole"
+MY_TEAM       = "evilbobdole"
+CHAMP_MY_TEAM = "EBD"
+CHAMP_START   = date(2026, 8, 10)
+CHAMP_END     = date(2026, 8, 23)
 SEASON_START = date(2026, 3, 25)
-WEEK1_END    = date(2026, 4, 5)
+WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -23,11 +26,23 @@ def strip_accents(name: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", str(name))
                    if unicodedata.category(c) != "Mn")
 
-def week_num(d: date) -> int:
+def week_num(d):
+    """Week calculation with All-Star break handling.
+    ASB (Jul 13-15) = week 0 (no stats). Week 16 extended Jul 16-26."""
     if d < SEASON_START: return 0
     if d <= WEEK1_END:   return 1
+    ASB_START   = __import__("datetime").date(2026, 7, 13)
+    ASB_END     = __import__("datetime").date(2026, 7, 15)
+    WEEK16_END  = __import__("datetime").date(2026, 7, 26)
+    WEEK17_START= __import__("datetime").date(2026, 7, 27)
+    if ASB_START <= d <= ASB_END: return 0
+    if d > WEEK16_END:
+        return 17 + (d - WEEK17_START).days // 7
+    if d >= ASB_START:
+        return 16
     delta = (d - (WEEK1_END + timedelta(days=1))).days
     return 2 + delta // 7
+
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -54,13 +69,24 @@ def fetch(url):
     r = requests.get(url, timeout=20); r.raise_for_status(); return r.json()
 
 def fetch_stats_for_date(d: date):
+    """Fetch stats for a date. Each game is processed exactly once.
+    Final games take priority — if a game is both Live and cached as Final,
+    we only process it once to avoid double-counting."""
     batting = {}; pitching = {}; date_str = str(d)
     data = fetch(f"{API}/schedule?sportId=1&date={date_str}")
+    processed_games = set()  # track gamePks already processed
+    
+    # First pass: process all Final games
+    # Exclude postponed, suspended, cancelled games
+    skip_states = {"Postponed", "Cancelled", "Suspended", "Delayed"}
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
-            if game.get("status", {}).get("abstractGameState") != "Final":
-                continue
+            state    = game.get("status", {}).get("abstractGameState", "")
+            detailed = game.get("status", {}).get("detailedState", "")
+            if state != "Final": continue
+            if any(s.lower() in detailed.lower() for s in skip_states): continue
             pk = game["gamePk"]
+            processed_games.add(pk)
             try:
                 box = fetch(f"{API}/game/{pk}/boxscore")
             except Exception:
@@ -79,11 +105,52 @@ def fetch_stats_for_date(d: date):
                         if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
                         key  = (date_str, name, team_abbr)
                         pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
+
+    # Second pass: process Live games that aren't already Final
+    for date_entry in data.get("dates", []):
+        for game in date_entry.get("games", []):
+            state    = game.get("status", {}).get("abstractGameState", "")
+            detailed = game.get("status", {}).get("detailedState", "")
+            if state != "Live": continue
+            if any(s.lower() in detailed.lower() for s in skip_states): continue
+            pk = game["gamePk"]
+            if pk in processed_games: continue  # already have Final version
+            processed_games.add(pk)
+            try:
+                box = fetch(f"{API}/game/{pk}/boxscore")
+            except Exception:
+                continue
+            for side in ("home", "away"):
+                team_abbr = box["teams"][side]["team"]["abbreviation"].replace("AZ","ARI")
+                for p in box["teams"][side]["players"].values():
+                    bs = p.get("stats", {}).get("batting")
+                    if bs and bs.get("atBats",0)+bs.get("baseOnBalls",0)+bs.get("hitByPitch",0) > 0:
+                        name = strip_accents(p["person"]["fullName"])
+                        key  = (date_str, name, team_abbr)
+                        batting[key] = batting.get(key, 0.0) + batting_dk(bs)
+                    ps = p.get("stats", {}).get("pitching")
+                    if ps and float(ps.get("inningsPitched", 0)) > 0:
+                        name = strip_accents(p["person"]["fullName"])
+                        if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
+                        key  = (date_str, name, team_abbr)
+                        pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
+
     return batting, pitching
 
 def load_all_stats():
     today = date.today(); yesterday = today - timedelta(days=1)
     all_batting = {}; all_pitching = {}
+
+    # On Mondays, only remove previous week dates from cache
+    import time as _t
+    from datetime import timezone, timedelta as _tde
+    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
+    _now_est  = datetime.utcnow() + _est_off
+    if _now_est.weekday() == 0:  # Monday
+        prev_end   = _now_est.date() - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=6)
+        # Will be handled below when we re-fetch yesterday automatically
+        print(f"  Monday — previous week ({prev_start} to {prev_end}) will be re-fetched.")
 
     # Load cache
     cache_file = Path("stats_cache.json"); cached_dates = set()
@@ -99,9 +166,9 @@ def load_all_stats():
         except Exception as e:
             print(f"  Cache load failed: {e}")
 
-    # Fetch missing historical dates
+    # Fetch missing historical dates (skip yesterday — always re-fetch it)
     d = SEASON_START
-    while d <= yesterday:
+    while d <= yesterday - timedelta(days=1):
         if str(d) not in cached_dates:
             print(f"  Fetching {d}...", end=" ", flush=True)
             try:
@@ -112,6 +179,20 @@ def load_all_stats():
                 print(f"✗ {e}")
         d += timedelta(days=1)
 
+    # Always re-fetch yesterday — catches late-finishing games
+    print(f"  Fetching yesterday ({yesterday})...", end=" ", flush=True)
+    try:
+        b, p = fetch_stats_for_date(yesterday)
+        # Remove old yesterday entries before updating
+        for k in list(all_batting.keys()):
+            if k[0] == str(yesterday): del all_batting[k]
+        for k in list(all_pitching.keys()):
+            if k[0] == str(yesterday): del all_pitching[k]
+        all_batting.update(b); all_pitching.update(p)
+        print(f"✓ ({len(b)} batting, {len(p)} pitching)")
+    except Exception as e:
+        print(f"✗ {e}")
+
     # Always fetch today
     print(f"  Fetching today ({today})...", end=" ", flush=True)
     try:
@@ -121,10 +202,11 @@ def load_all_stats():
     except Exception as e:
         print(f"✗ {e}")
 
-    # Save cache (exclude today — may be incomplete)
+    # Save cache (exclude today and yesterday — both always re-fetched)
     try:
-        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] != str(today)}
-        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] != str(today)}
+        exclude = {str(today), str(yesterday)}
+        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] not in exclude}
+        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] not in exclude}
         cache_file.write_text(json.dumps({"batting": cb, "pitching": cp}))
         print(f"  Cache saved.")
     except Exception as e:
@@ -135,11 +217,11 @@ def load_all_stats():
 # ── SCORING ────────────────────────────────────────────────────────────────────
 
 def player_score_ci(name, mlb, pos, week, batting, pitching):
+    """Match on name only — handles mid-season trades where team abbreviation may have changed."""
     name = strip_accents(str(name).strip())
-    team = str(mlb).strip().upper().replace("AZ","ARI")
     src  = pitching if pos == "P" else batting
     return round(sum(v for k, v in src.items()
-                     if k[1]==name and k[2]==team and week_num(date.fromisoformat(k[0]))==week), 2)
+                     if k[1]==name and week_num(date.fromisoformat(k[0]))==week), 2)
 
 def starters_score_ci(roster, team_name, date_str, batting, pitching, week):
     by_pos = {"P": [], "IF": [], "OF": []}
@@ -183,13 +265,13 @@ def build_bench_ci(roster, team_name, batting, pitching, batting_daily, pitching
         all_players.append({**p, "week_total": wk_total, "weeks": wk_list,
                             "total": round(sum(wk_list), 2), "daily": daily, "yesterday": yest})
 
-    # Find starters (top 3 per pos by week total)
+    # Find starters (top 3 per pos by CURRENT week score)
     starters = set()
     by_pos = {"P": [], "IF": [], "OF": []}
     for p in all_players:
         if p["pos"] in by_pos: by_pos[p["pos"]].append(p)
     for pos, plist in by_pos.items():
-        for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
+        for p in sorted(plist, key=lambda x: x["weeks"][-1] if x["weeks"] else 0, reverse=True)[:3]:
             starters.add(p["name"])
 
     pos_order = {"P": 0, "IF": 1, "OF": 2}
@@ -242,6 +324,19 @@ def fetch_active_lineups() -> set:
     return active
 
 
+def is_champ_date(d_str):
+    try:
+        d = date.fromisoformat(str(d_str)[:10])
+        return CHAMP_START <= d <= CHAMP_END
+    except: return False
+
+def champ_player_score_ci(name, mlb, pos, batting, pitching):
+    """Match on name only — handles mid-season trades where team may have changed."""
+    name_s = strip_accents(str(name).strip())
+    src    = pitching if pos == "P" else batting
+    return round(sum(v for k,v in src.items()
+                     if is_champ_date(k[0]) and k[1]==name_s), 2)
+
 def load_rosters():
     roster_file = Path("rosters.json")
     if not roster_file.exists():
@@ -254,7 +349,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    parser.add_argument("--weeks", type=int, default=1)
+    # Auto-detect current week from today's date
+    import time as _t2
+    from datetime import timedelta as _td2
+    _est2 = timedelta(hours=-4) if (_t2.daylight and _t2.localtime().tm_isdst) else timedelta(hours=-5)
+    _today_est = (datetime.utcnow() + _est2).date()
+    _auto_weeks = week_num(_today_est)
+    parser.add_argument("--weeks", type=int, default=_auto_weeks)
     args = parser.parse_args()
 
     print("Loading rosters...")
@@ -279,6 +380,7 @@ def main():
     drafts = []
     for sheet_name, roster in all_rosters.items():
         num   = int(sheet_name.replace("draftboard_","").replace("_",""))
+        if num != 16: continue  # Only calculate draft 16 alongside championship
         teams = list(dict.fromkeys(p["team_name"] for p in roster))
 
         team_data = {}
@@ -293,6 +395,11 @@ def main():
         # Opponent: 3rd if evilbobdole is in top 2, else 2nd
         opp_idx     = 2 if (my_rank and my_rank <= 2) else 1
         second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
+
+        # Weekly gap
+        my_week_pts  = team_data.get(MY_TEAM, {}).get("weeks", [0.0])[-1] if MY_TEAM in teams else 0.0
+        opp_week_pts = team_data.get(second_team, {}).get("weeks", [0.0])[-1] if second_team else 0.0
+        my_week_gap  = round(my_week_pts - opp_week_pts, 2)
 
         def build_players_ci(team_name):
             players = []
@@ -335,6 +442,7 @@ def main():
             "num": num, "sheet": sheet_name, "roster": roster,
             "teams": teams, "data": team_data, "ranked": ranked,
             "my_rank": my_rank, "my_pts": my_pts,
+            "my_week_pts": my_week_pts, "my_week_gap": my_week_gap,
             "my_players": my_players, "my_bench": my_bench,
             "second_team": second_team, "second_players": second_players,
             "second_bench": second_bench, "daily_scores": daily_scores,
@@ -382,13 +490,86 @@ def main():
     pub  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pub)
 
-    from datetime import timezone, timedelta as _tde
     import time as _t
-    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
-    _now_est  = datetime.utcnow() + _est_off
-    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
+    from datetime import timezone, timedelta as _tde
+    # EDT = UTC-4 (Mar-Nov), EST = UTC-5 (Nov-Mar)
+    # Use tm_isdst from localtime as a proxy — works on most systems
+    _is_dst  = bool(_t.localtime().tm_isdst)
+    _est_off = _tde(hours=-4) if _is_dst else _tde(hours=-5)
+    _now_est = datetime.utcnow() + _est_off
+    _tz_lbl  = "EDT" if _is_dst else "EST"
+    generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
+    # ── CHAMPIONSHIP ────────────────────────────────────────────────────────
+    champ_draft   = None
+    champ_ros_path = Path("championship_rosters.json")
+    if champ_ros_path.exists():
+        champ_data   = json.loads(champ_ros_path.read_text())
+        champ_roster = champ_data.get("championship", [])
+        champ_teams  = list(dict.fromkeys(p["team_name"] for p in champ_roster))
+        today_d      = datetime.utcnow().date()
+
+        champ_team_data = {}
+        for team in champ_teams:
+            by_pos = {"P":[], "IF":[], "OF":[]}
+            for p in champ_roster:
+                if p["team_name"]!=team or p["pos"] not in by_pos: continue
+                score = champ_player_score_ci(p["name"],p["mlb"],p["pos"],batting,pitching)
+                by_pos[p["pos"]].append(score)
+            total = sum(sum(sorted(scores,reverse=True)[:3]) for scores in by_pos.values())
+            champ_team_data[team] = {"total": round(total,2)}
+
+        champ_ranked   = sorted(champ_teams, key=lambda t: champ_team_data[t]["total"], reverse=True)
+        my_champ_rank  = champ_ranked.index(CHAMP_MY_TEAM)+1 if CHAMP_MY_TEAM in champ_ranked else None
+        my_champ_pts   = champ_team_data.get(CHAMP_MY_TEAM,{}).get("total",0.0)
+        opp_idx        = 2 if (my_champ_rank and my_champ_rank<=2) else 1
+        champ_opp      = champ_ranked[opp_idx] if len(champ_ranked)>opp_idx else None
+        champ_opp_pts  = champ_team_data.get(champ_opp,{}).get("total",0.0)
+
+        def build_champ_team_ci(team_name):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in champ_roster:
+                if p["team_name"]!=team_name or p["pos"] not in by_pos: continue
+                score  = champ_player_score_ci(p["name"],p["mlb"],p["pos"],batting,pitching)
+                name_s = strip_accents(str(p["name"]).strip())
+                team_s = str(p["mlb"]).strip().upper().replace("AZ","ARI")
+                daily  = round((batting_daily if p["pos"]!="P" else pitching_daily).get((latest_date,name_s,team_s),0.0),2)
+                yest   = round((batting_yest  if p["pos"]!="P" else pitching_yest ).get((yesterday_date,name_s,team_s),0.0),2) if yesterday_date else 0.0
+                by_pos[p["pos"]].append({**p,"total":score,"daily":daily,"yesterday":yest})
+            starters=[]; bench=[]
+            for pos in ["P","IF","OF"]:
+                s = sorted(by_pos[pos],key=lambda x:x["total"],reverse=True)
+                starters.extend(s[:3]); bench.extend(s[3:])
+            return starters, bench
+
+        my_st,  my_bn  = build_champ_team_ci(CHAMP_MY_TEAM) if CHAMP_MY_TEAM in champ_teams else ([],[])
+        opp_st, opp_bn = build_champ_team_ci(champ_opp)     if champ_opp                    else ([],[])
+
+        champ_draft = {
+            "num":"CHAMP","sheet":"championship","is_champ":True,
+            "roster":champ_roster,"teams":champ_teams,
+            "data":champ_team_data,"ranked":champ_ranked,
+            "my_rank":my_champ_rank,"my_pts":my_champ_pts,
+            "my_week_pts":my_champ_pts,
+            "my_week_gap":round(my_champ_pts-champ_opp_pts,2),
+            "my_players":my_st,"my_bench":my_bn,
+            "second_team":champ_opp,"second_players":opp_st,"second_bench":opp_bn,
+            "daily_scores":{},"my_daily":sum(p["daily"] for p in my_st),
+            "second_today":sum(p["daily"] for p in opp_st),
+            "my_daily_gap":round(sum(p["daily"] for p in my_st)-sum(p["daily"] for p in opp_st),2),
+            "my_yesterday":sum(p["yesterday"] for p in my_st),
+            "second_yesterday":sum(p["yesterday"] for p in opp_st),
+            "my_yesterday_gap":round(sum(p["yesterday"] for p in my_st)-sum(p["yesterday"] for p in opp_st),2),
+            "latest_date":latest_date,"yesterday_date":yesterday_date,
+            "champ_start":str(CHAMP_START),"champ_end":str(CHAMP_END),
+            "champ_active": CHAMP_START <= today_d <= CHAMP_END,
+        }
+        print(f"  Championship: {CHAMP_MY_TEAM} {my_champ_pts:.2f} pts (rank {my_champ_rank})")
+    else:
+        print("  championship_rosters.json not found — skipping")
+
     print("Building HTML...")
-    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
+    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at,
+                          champ_draft=champ_draft)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")
