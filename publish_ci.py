@@ -13,9 +13,10 @@ from datetime import date, timedelta, datetime
 from pathlib import Path
 
 MY_TEAM       = "evilbobdole"
-CHAMP_MY_TEAM = "EBD"
-CHAMP_START   = date(2026, 8, 10)
-CHAMP_END     = date(2026, 8, 23)
+CHAMP_MY_TEAM      = "EBD"
+CHAMP_START        = date(2026, 8, 10)
+CHAMP_END          = date(2026, 8, 23)
+STATS_FREEZE_DATE  = date(2026, 8, 9)  # Never re-fetch stats before this date
 SEASON_START = date(2026, 3, 25)
 WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
 API          = "https://statsapi.mlb.com/api/v1"
@@ -150,7 +151,22 @@ def load_all_stats():
         prev_end   = _now_est.date() - timedelta(days=1)
         prev_start = prev_end - timedelta(days=6)
         # Will be handled below when we re-fetch yesterday automatically
-        print(f"  Monday — previous week ({prev_start} to {prev_end}) will be re-fetched.")
+        # Only clear dates after the freeze date
+        for k in list(all_batting.keys()):
+            d_str = k[0] if isinstance(k, tuple) else k.split("|")[0]
+            try:
+                d_obj = date.fromisoformat(d_str)
+                if prev_start <= d_obj <= prev_end and d_obj > STATS_FREEZE_DATE:
+                    del all_batting[k]
+            except: pass
+        for k in list(all_pitching.keys()):
+            d_str = k[0] if isinstance(k, tuple) else k.split("|")[0]
+            try:
+                d_obj = date.fromisoformat(d_str)
+                if prev_start <= d_obj <= prev_end and d_obj > STATS_FREEZE_DATE:
+                    del all_pitching[k]
+            except: pass
+        print(f"  Monday — previous week ({prev_start} to {prev_end}) cleared for re-fetch.")
 
     # Load cache
     cache_file = Path("stats_cache.json"); cached_dates = set()
@@ -167,9 +183,10 @@ def load_all_stats():
             print(f"  Cache load failed: {e}")
 
     # Fetch missing historical dates (skip yesterday — always re-fetch it)
+    # Never re-fetch dates on or before STATS_FREEZE_DATE
     d = SEASON_START
     while d <= yesterday - timedelta(days=1):
-        if str(d) not in cached_dates:
+        if str(d) not in cached_dates and d > STATS_FREEZE_DATE:
             print(f"  Fetching {d}...", end=" ", flush=True)
             try:
                 b, p = fetch_stats_for_date(d)
