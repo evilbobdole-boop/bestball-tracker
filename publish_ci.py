@@ -14,7 +14,7 @@ from pathlib import Path
 
 MY_TEAM      = "evilbobdole"
 SEASON_START = date(2026, 3, 25)
-WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
+WEEK1_END    = date(2026, 4, 5)
 API          = "https://statsapi.mlb.com/api/v1"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -24,14 +24,10 @@ def strip_accents(name: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 def week_num(d: date) -> int:
-    """Dynamic week calculation — no hardcoded week boundaries needed.
-    Week 1 = Mar 25 - Apr 5 (12 days), then 7-day weeks from Apr 6 onward.
-    Automatically handles any future week without code changes."""
     if d < SEASON_START: return 0
     if d <= WEEK1_END:   return 1
     delta = (d - (WEEK1_END + timedelta(days=1))).days
     return 2 + delta // 7
-
 
 def ip_to_decimal(ip_raw) -> float:
     ip = float(ip_raw); full = int(ip); outs = round((ip - full) * 10)
@@ -58,24 +54,13 @@ def fetch(url):
     r = requests.get(url, timeout=20); r.raise_for_status(); return r.json()
 
 def fetch_stats_for_date(d: date):
-    """Fetch stats for a date. Each game is processed exactly once.
-    Final games take priority — if a game is both Live and cached as Final,
-    we only process it once to avoid double-counting."""
     batting = {}; pitching = {}; date_str = str(d)
     data = fetch(f"{API}/schedule?sportId=1&date={date_str}")
-    processed_games = set()  # track gamePks already processed
-    
-    # First pass: process all Final games
-    # Exclude postponed, suspended, cancelled games
-    skip_states = {"Postponed", "Cancelled", "Suspended", "Delayed"}
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
-            state    = game.get("status", {}).get("abstractGameState", "")
-            detailed = game.get("status", {}).get("detailedState", "")
-            if state != "Final": continue
-            if any(s.lower() in detailed.lower() for s in skip_states): continue
+            if game.get("status", {}).get("abstractGameState") != "Final":
+                continue
             pk = game["gamePk"]
-            processed_games.add(pk)
             try:
                 box = fetch(f"{API}/game/{pk}/boxscore")
             except Exception:
@@ -94,52 +79,11 @@ def fetch_stats_for_date(d: date):
                         if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
                         key  = (date_str, name, team_abbr)
                         pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
-
-    # Second pass: process Live games that aren't already Final
-    for date_entry in data.get("dates", []):
-        for game in date_entry.get("games", []):
-            state    = game.get("status", {}).get("abstractGameState", "")
-            detailed = game.get("status", {}).get("detailedState", "")
-            if state != "Live": continue
-            if any(s.lower() in detailed.lower() for s in skip_states): continue
-            pk = game["gamePk"]
-            if pk in processed_games: continue  # already have Final version
-            processed_games.add(pk)
-            try:
-                box = fetch(f"{API}/game/{pk}/boxscore")
-            except Exception:
-                continue
-            for side in ("home", "away"):
-                team_abbr = box["teams"][side]["team"]["abbreviation"].replace("AZ","ARI")
-                for p in box["teams"][side]["players"].values():
-                    bs = p.get("stats", {}).get("batting")
-                    if bs and bs.get("atBats",0)+bs.get("baseOnBalls",0)+bs.get("hitByPitch",0) > 0:
-                        name = strip_accents(p["person"]["fullName"])
-                        key  = (date_str, name, team_abbr)
-                        batting[key] = batting.get(key, 0.0) + batting_dk(bs)
-                    ps = p.get("stats", {}).get("pitching")
-                    if ps and float(ps.get("inningsPitched", 0)) > 0:
-                        name = strip_accents(p["person"]["fullName"])
-                        if ip_to_decimal(ps.get("inningsPitched",0)) == 0: continue
-                        key  = (date_str, name, team_abbr)
-                        pitching[key] = pitching.get(key, 0.0) + pitching_dk(ps)
-
     return batting, pitching
 
 def load_all_stats():
     today = date.today(); yesterday = today - timedelta(days=1)
     all_batting = {}; all_pitching = {}
-
-    # On Mondays, clear cache to force full re-fetch for new week
-    import time as _t
-    from datetime import timezone, timedelta as _tde
-    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
-    _now_est  = datetime.utcnow() + _est_off
-    if _now_est.weekday() == 0:  # Monday
-        cache_file_check = Path("stats_cache.json")
-        if cache_file_check.exists():
-            cache_file_check.unlink()
-            print("  Monday — cache cleared for new week re-fetch.")
 
     # Load cache
     cache_file = Path("stats_cache.json"); cached_dates = set()
@@ -155,9 +99,9 @@ def load_all_stats():
         except Exception as e:
             print(f"  Cache load failed: {e}")
 
-    # Fetch missing historical dates (skip yesterday — always re-fetch it)
+    # Fetch missing historical dates
     d = SEASON_START
-    while d <= yesterday - timedelta(days=1):
+    while d <= yesterday:
         if str(d) not in cached_dates:
             print(f"  Fetching {d}...", end=" ", flush=True)
             try:
@@ -168,20 +112,6 @@ def load_all_stats():
                 print(f"✗ {e}")
         d += timedelta(days=1)
 
-    # Always re-fetch yesterday — catches late-finishing games
-    print(f"  Fetching yesterday ({yesterday})...", end=" ", flush=True)
-    try:
-        b, p = fetch_stats_for_date(yesterday)
-        # Remove old yesterday entries before updating
-        for k in list(all_batting.keys()):
-            if k[0] == str(yesterday): del all_batting[k]
-        for k in list(all_pitching.keys()):
-            if k[0] == str(yesterday): del all_pitching[k]
-        all_batting.update(b); all_pitching.update(p)
-        print(f"✓ ({len(b)} batting, {len(p)} pitching)")
-    except Exception as e:
-        print(f"✗ {e}")
-
     # Always fetch today
     print(f"  Fetching today ({today})...", end=" ", flush=True)
     try:
@@ -191,11 +121,10 @@ def load_all_stats():
     except Exception as e:
         print(f"✗ {e}")
 
-    # Save cache (exclude today and yesterday — both always re-fetched)
+    # Save cache (exclude today — may be incomplete)
     try:
-        exclude = {str(today), str(yesterday)}
-        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] not in exclude}
-        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] not in exclude}
+        cb = {"|".join(k): v for k, v in all_batting.items()  if k[0] != str(today)}
+        cp = {"|".join(k): v for k, v in all_pitching.items() if k[0] != str(today)}
         cache_file.write_text(json.dumps({"batting": cb, "pitching": cp}))
         print(f"  Cache saved.")
     except Exception as e:
@@ -254,13 +183,13 @@ def build_bench_ci(roster, team_name, batting, pitching, batting_daily, pitching
         all_players.append({**p, "week_total": wk_total, "weeks": wk_list,
                             "total": round(sum(wk_list), 2), "daily": daily, "yesterday": yest})
 
-    # Find starters (top 3 per pos by CURRENT week score)
+    # Find starters (top 3 per pos by week total)
     starters = set()
     by_pos = {"P": [], "IF": [], "OF": []}
     for p in all_players:
         if p["pos"] in by_pos: by_pos[p["pos"]].append(p)
     for pos, plist in by_pos.items():
-        for p in sorted(plist, key=lambda x: x["weeks"][-1] if x["weeks"] else 0, reverse=True)[:3]:
+        for p in sorted(plist, key=lambda x: x["total"], reverse=True)[:3]:
             starters.add(p["name"])
 
     pos_order = {"P": 0, "IF": 1, "OF": 2}
@@ -325,13 +254,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true")
-    # Auto-detect current week from today's date
-    import time as _t2
-    from datetime import timedelta as _td2
-    _est2 = timedelta(hours=-4) if (_t2.daylight and _t2.localtime().tm_isdst) else timedelta(hours=-5)
-    _today_est = (datetime.utcnow() + _est2).date()
-    _auto_weeks = week_num(_today_est)
-    parser.add_argument("--weeks", type=int, default=_auto_weeks)
+    parser.add_argument("--weeks", type=int, default=1)
     args = parser.parse_args()
 
     print("Loading rosters...")
@@ -370,11 +293,6 @@ def main():
         # Opponent: 3rd if evilbobdole is in top 2, else 2nd
         opp_idx     = 2 if (my_rank and my_rank <= 2) else 1
         second_team = ranked[opp_idx] if len(ranked) > opp_idx else None
-
-        # Weekly gap
-        my_week_pts  = team_data.get(MY_TEAM, {}).get("weeks", [0.0])[-1] if MY_TEAM in teams else 0.0
-        opp_week_pts = team_data.get(second_team, {}).get("weeks", [0.0])[-1] if second_team else 0.0
-        my_week_gap  = round(my_week_pts - opp_week_pts, 2)
 
         def build_players_ci(team_name):
             players = []
@@ -417,7 +335,6 @@ def main():
             "num": num, "sheet": sheet_name, "roster": roster,
             "teams": teams, "data": team_data, "ranked": ranked,
             "my_rank": my_rank, "my_pts": my_pts,
-            "my_week_pts": my_week_pts, "my_week_gap": my_week_gap,
             "my_players": my_players, "my_bench": my_bench,
             "second_team": second_team, "second_players": second_players,
             "second_bench": second_bench, "daily_scores": daily_scores,
@@ -465,17 +382,13 @@ def main():
     pub  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pub)
 
-    import time as _t
     from datetime import timezone, timedelta as _tde
-    # EDT = UTC-4 (Mar-Nov), EST = UTC-5 (Nov-Mar)
-    # Use tm_isdst from localtime as a proxy — works on most systems
-    _is_dst  = bool(_t.localtime().tm_isdst)
-    _est_off = _tde(hours=-4) if _is_dst else _tde(hours=-5)
-    _now_est = datetime.utcnow() + _est_off
-    _tz_lbl  = "EDT" if _is_dst else "EST"
-    generated_at = _now_est.strftime(f"%B %d, %Y at %I:%M %p {_tz_lbl}")
+    import time as _t
+    _est_off  = _tde(hours=-4) if (_t.daylight and _t.localtime().tm_isdst) else _tde(hours=-5)
+    _now_est  = datetime.utcnow() + _est_off
+    generated_at = _now_est.strftime("%B %d, %Y at %I:%M %p EST")
     print("Building HTML...")
-    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at, xlsx=Path("DkPreDraftRankings_12_.csv").parent)
+    html = pub.build_html(drafts, player_analytics, args.weeks, generated_at)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")

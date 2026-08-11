@@ -1,0 +1,844 @@
+{
+  "championship": [
+    {
+      "name": "Tarik Skubal",
+      "pos": "P",
+      "mlb": "DET",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Cristopher Sanchez",
+      "pos": "P",
+      "mlb": "PHI",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Max Fried",
+      "pos": "P",
+      "mlb": "NYY",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Francisco Lindor",
+      "pos": "IF",
+      "mlb": "NYM",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "CJ Abrams",
+      "pos": "IF",
+      "mlb": "WSH",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Jeremy Pena",
+      "pos": "IF",
+      "mlb": "HOU",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Corbin Carroll",
+      "pos": "OF",
+      "mlb": "ARI",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Stowers",
+      "pos": "OF",
+      "mlb": "MIA",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Steven Kwan",
+      "pos": "OF",
+      "mlb": "CLE",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Zack Wheeler",
+      "pos": "P",
+      "mlb": "PHI",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Blake Snell",
+      "pos": "P",
+      "mlb": "LAD",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Jacob Misiorowski",
+      "pos": "P",
+      "mlb": "MIL",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Munetaka Murakami",
+      "pos": "IF",
+      "mlb": "CWS",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Jackson Holliday",
+      "pos": "IF",
+      "mlb": "BAL",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Tanner Bibee",
+      "pos": "P",
+      "mlb": "CLE",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Drake Baldwin",
+      "pos": "IF",
+      "mlb": "ATL",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Lourdes Gurriel Jr.",
+      "pos": "OF",
+      "mlb": "ARI",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Alec Burleson",
+      "pos": "OF",
+      "mlb": "STL",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Andrew Painter",
+      "pos": "P",
+      "mlb": "PHI",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Evan Carter",
+      "pos": "OF",
+      "mlb": "TEX",
+      "team_name": "EBD",
+      "pick": 0
+    },
+    {
+      "name": "Garrett Crochet",
+      "pos": "P",
+      "mlb": "BOS",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Max Fried",
+      "pos": "P",
+      "mlb": "NYY",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Kevin Gausman",
+      "pos": "P",
+      "mlb": "TOR",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Bo Bichette",
+      "pos": "IF",
+      "mlb": "NYM",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Jorge Polanco",
+      "pos": "IF",
+      "mlb": "NYM",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Bryce Harper",
+      "pos": "IF",
+      "mlb": "PHI",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Yordan Alvarez",
+      "pos": "OF",
+      "mlb": "HOU",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Jackson Merrill",
+      "pos": "OF",
+      "mlb": "SD",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Michael Harris II",
+      "pos": "OF",
+      "mlb": "ATL",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Jose Altuve",
+      "pos": "IF",
+      "mlb": "HOU",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Sandy Alcantara",
+      "pos": "P",
+      "mlb": "MIA",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Nico Hoerner",
+      "pos": "IF",
+      "mlb": "CHC",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Carlos Rodon",
+      "pos": "P",
+      "mlb": "NYY",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Daulton Varsho",
+      "pos": "OF",
+      "mlb": "TOR",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Isaac Paredes",
+      "pos": "IF",
+      "mlb": "HOU",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Jordan Beck",
+      "pos": "OF",
+      "mlb": "COL",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Merrill Kelly",
+      "pos": "P",
+      "mlb": "ARI",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Konnor Griffin",
+      "pos": "IF",
+      "mlb": "PIT",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Alec Burleson",
+      "pos": "OF",
+      "mlb": "STL",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Reid Detmers",
+      "pos": "P",
+      "mlb": "LAA",
+      "team_name": "TheOldPRof",
+      "pick": 0
+    },
+    {
+      "name": "Dylan Cease",
+      "pos": "P",
+      "mlb": "TOR",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "George Kirby",
+      "pos": "P",
+      "mlb": "SEA",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Nolan McLean",
+      "pos": "P",
+      "mlb": "NYM",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Matt Olson",
+      "pos": "IF",
+      "mlb": "ATL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Pete Alonso",
+      "pos": "IF",
+      "mlb": "BAL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Ben Rice",
+      "pos": "IF",
+      "mlb": "NYY",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Shohei Ohtani",
+      "pos": "OF",
+      "mlb": "LAD",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Yordan Alvarez",
+      "pos": "OF",
+      "mlb": "HOU",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Taylor Ward",
+      "pos": "OF",
+      "mlb": "BAL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Jac Caglianone",
+      "pos": "OF",
+      "mlb": "KC",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Colton Cowser",
+      "pos": "OF",
+      "mlb": "BAL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Cam Schlittler",
+      "pos": "P",
+      "mlb": "NYY",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Jordan Beck",
+      "pos": "OF",
+      "mlb": "COL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Will Smith",
+      "pos": "IF",
+      "mlb": "LAD",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Kris Bubic",
+      "pos": "P",
+      "mlb": "KC",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Cade Horton",
+      "pos": "P",
+      "mlb": "CHC",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Agustin Ramirez",
+      "pos": "IF",
+      "mlb": "MIA",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Matt Wallner",
+      "pos": "OF",
+      "mlb": "MIN",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Carter Jensen",
+      "pos": "IF",
+      "mlb": "KC",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Trevor Rogers",
+      "pos": "P",
+      "mlb": "BAL",
+      "team_name": "CT Wichita",
+      "pick": 0
+    },
+    {
+      "name": "Yoshinobu Yamamoto",
+      "pos": "P",
+      "mlb": "LAD",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Jacob deGrom",
+      "pos": "P",
+      "mlb": "TEX",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Jacob Misiorowski",
+      "pos": "P",
+      "mlb": "MIL",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Freddie Freeman",
+      "pos": "IF",
+      "mlb": "LAD",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Jeremy Pena",
+      "pos": "IF",
+      "mlb": "HOU",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Ozzie Albies",
+      "pos": "IF",
+      "mlb": "ATL",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Schwarber",
+      "pos": "OF",
+      "mlb": "PHI",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "James Wood",
+      "pos": "OF",
+      "mlb": "WSH",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Teoscar Hernandez",
+      "pos": "OF",
+      "mlb": "LAD",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Mike Trout",
+      "pos": "OF",
+      "mlb": "LAA",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Jacob Wilson",
+      "pos": "IF",
+      "mlb": "ATH",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Tyler Glasnow",
+      "pos": "P",
+      "mlb": "LAD",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Luis Castillo",
+      "pos": "P",
+      "mlb": "SEA",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Daylen Lile",
+      "pos": "OF",
+      "mlb": "WSH",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Brandon Lowe",
+      "pos": "IF",
+      "mlb": "PIT",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Yusei Kikuchi",
+      "pos": "P",
+      "mlb": "LAA",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Kevin McGonigle",
+      "pos": "IF",
+      "mlb": "DET",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Logan Henderson",
+      "pos": "P",
+      "mlb": "MIL",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Justin Crawford",
+      "pos": "OF",
+      "mlb": "PHI",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Cody Ponce",
+      "pos": "P",
+      "mlb": "TOR",
+      "team_name": "Jish6",
+      "pick": 0
+    },
+    {
+      "name": "Chris Sale",
+      "pos": "P",
+      "mlb": "ATL",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Pablo Lopez",
+      "pos": "P",
+      "mlb": "MIN",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Brandon Woodruff",
+      "pos": "P",
+      "mlb": "MIL",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Vladimir Guerrero Jr.",
+      "pos": "IF",
+      "mlb": "TOR",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Ketel Marte",
+      "pos": "IF",
+      "mlb": "ARI",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Geraldo Perdomo",
+      "pos": "IF",
+      "mlb": "ARI",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Schwarber",
+      "pos": "OF",
+      "mlb": "PHI",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Cody Bellinger",
+      "pos": "OF",
+      "mlb": "NYY",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Stowers",
+      "pos": "OF",
+      "mlb": "MIA",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Bryan Reynolds",
+      "pos": "OF",
+      "mlb": "PIT",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Ben Rice",
+      "pos": "IF",
+      "mlb": "NYY",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Munetaka Murakami",
+      "pos": "IF",
+      "mlb": "CWS",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Adolis Garcia",
+      "pos": "OF",
+      "mlb": "PHI",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Gavin Williams",
+      "pos": "P",
+      "mlb": "CLE",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Christian Walker",
+      "pos": "IF",
+      "mlb": "HOU",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Shota Imanaga",
+      "pos": "P",
+      "mlb": "CHC",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Ramon Laureano",
+      "pos": "OF",
+      "mlb": "SD",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Yusei Kikuchi",
+      "pos": "P",
+      "mlb": "LAA",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Matthew Boyd",
+      "pos": "P",
+      "mlb": "CHC",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Mike Yastrzemski",
+      "pos": "OF",
+      "mlb": "ATL",
+      "team_name": "Noodle 28",
+      "pick": 0
+    },
+    {
+      "name": "Joe Ryan",
+      "pos": "P",
+      "mlb": "MIN",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Nolan McLean",
+      "pos": "P",
+      "mlb": "NYM",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Tatsuya Imai",
+      "pos": "P",
+      "mlb": "HOU",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Corey Seager",
+      "pos": "IF",
+      "mlb": "TEX",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Spencer Torkelson",
+      "pos": "IF",
+      "mlb": "DET",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Hunter Goodman",
+      "pos": "IF",
+      "mlb": "COL",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Shohei Ohtani",
+      "pos": "OF",
+      "mlb": "LAD",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Pete Crow-Armstrong",
+      "pos": "OF",
+      "mlb": "CHC",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Cody Bellinger",
+      "pos": "OF",
+      "mlb": "NYY",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Christian Yelich",
+      "pos": "OF",
+      "mlb": "MIL",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Stowers",
+      "pos": "OF",
+      "mlb": "MIA",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Robbie Ray",
+      "pos": "P",
+      "mlb": "SF",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Cam Schlittler",
+      "pos": "P",
+      "mlb": "NYY",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Kyle Manzardo",
+      "pos": "IF",
+      "mlb": "CLE",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Kris Bubic",
+      "pos": "P",
+      "mlb": "KC",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Jonathan Aranda",
+      "pos": "IF",
+      "mlb": "TB",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Ivan Herrera",
+      "pos": "IF",
+      "mlb": "STL",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Harrison Bader",
+      "pos": "OF",
+      "mlb": "SF",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Sal Stewart",
+      "pos": "IF",
+      "mlb": "CIN",
+      "team_name": "Krumbo",
+      "pick": 0
+    },
+    {
+      "name": "Justin Crawford",
+      "pos": "OF",
+      "mlb": "PHI",
+      "team_name": "Krumbo",
+      "pick": 0
+    }
+  ]
+}
