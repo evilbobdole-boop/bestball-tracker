@@ -397,7 +397,7 @@ def main():
     drafts = []
     for sheet_name, roster in all_rosters.items():
         num   = int(sheet_name.replace("draftboard_","").replace("_",""))
-        if num != 16: continue  # Only calculate draft 16 alongside championship
+        continue  # Skip all regular drafts — championship only
         teams = list(dict.fromkeys(p["team_name"] for p in roster))
 
         team_data = {}
@@ -521,7 +521,17 @@ def main():
     champ_ros_path = Path("championship_rosters.json")
     if champ_ros_path.exists():
         champ_data   = json.loads(champ_ros_path.read_text())
-        champ_roster = champ_data.get("championship", [])
+        champ_roster_raw = champ_data.get("championship", [])
+        champ_roster = []
+        for _p in champ_roster_raw:
+            _ns  = strip_accents(str(_p["name"]).strip())
+            _src = pitching if _p["pos"]=="P" else batting
+            _srd = batting_daily  if _p["pos"]!="P" else pitching_daily
+            _sry = batting_yest   if _p["pos"]!="P" else pitching_yest
+            _tot = round(sum(v for k,v in _src.items() if is_champ_date(k[0]) and k[1]==_ns), 2)
+            _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
+            _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
+            champ_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
         champ_teams  = list(dict.fromkeys(p["team_name"] for p in champ_roster))
         today_d      = datetime.utcnow().date()
 
@@ -584,9 +594,83 @@ def main():
     else:
         print("  championship_rosters.json not found — skipping")
 
+    # ── CHAMPIONSHIP 2 ────────────────────────────────────────────────────────
+    champ2_draft    = None
+    champ2_ros_path = Path("championship2_rosters.json")
+    if champ2_ros_path.exists():
+        champ2_data   = json.loads(champ2_ros_path.read_text())
+        champ2_roster_raw = champ2_data.get("championship2", [])
+        # Pre-score all championship2 players
+        champ2_roster = []
+        for _p in champ2_roster_raw:
+            _ns  = strip_accents(str(_p["name"]).strip())
+            _src = pitching if _p["pos"]=="P" else batting
+            _srd = batting_daily  if _p["pos"]!="P" else pitching_daily
+            _sry = batting_yest   if _p["pos"]!="P" else pitching_yest
+            _tot = round(sum(v for k,v in _src.items() if is_champ_date(k[0]) and k[1]==_ns), 2)
+            _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
+            _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
+            champ2_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
+        c2_teams = list(dict.fromkeys(p["team_name"] for p in champ2_roster))
+        today_d2      = datetime.utcnow().date()
+
+        c2_team_data = {}
+        for team in c2_teams:
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in champ2_roster:
+                if p["team_name"]!=team or p["pos"] not in by_pos: continue
+                score = champ_player_score_ci(p["name"],p["mlb"],p["pos"],batting,pitching)
+                by_pos[p["pos"]].append(score)
+            total = sum(sum(sorted(s,reverse=True)[:3]) for s in by_pos.values())
+            c2_team_data[team] = {"total": round(total,2)}
+
+        c2_ranked   = sorted(c2_teams, key=lambda t: c2_team_data[t]["total"], reverse=True)
+        my_c2_rank  = c2_ranked.index(CHAMP_MY_TEAM)+1 if CHAMP_MY_TEAM in c2_ranked else None
+        my_c2_pts   = c2_team_data.get(CHAMP_MY_TEAM,{}).get("total",0.0)
+        c2_opp_idx  = 2 if (my_c2_rank and my_c2_rank<=2) else 1
+        c2_opp      = c2_ranked[c2_opp_idx] if len(c2_ranked)>c2_opp_idx else None
+        c2_opp_pts  = c2_team_data.get(c2_opp,{}).get("total",0.0)
+
+        def build_champ2_team_ci(team_name):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in champ2_roster:
+                if p["team_name"]!=team_name or p["pos"] not in by_pos: continue
+                score  = champ_player_score_ci(p["name"],p["mlb"],p["pos"],batting,pitching)
+                name_s = strip_accents(str(p["name"]).strip())
+                daily  = round(sum(v for k,v in (batting_daily if p["pos"]!="P" else pitching_daily).items() if k[0]==latest_date    and k[1]==name_s),2) if latest_date    else 0.0
+                yest   = round(sum(v for k,v in (batting_yest  if p["pos"]!="P" else pitching_yest ).items() if k[0]==yesterday_date and k[1]==name_s),2) if yesterday_date else 0.0
+                by_pos[p["pos"]].append({**p,"total":score,"daily":daily,"yesterday":yest})
+            starters=[]; bench=[]
+            for pos in ["P","IF","OF"]:
+                s = sorted(by_pos[pos],key=lambda x:x["total"],reverse=True)
+                starters.extend(s[:3]); bench.extend(s[3:])
+            return starters, bench
+
+        my2_st, my2_bn = build_champ2_team_ci(CHAMP_MY_TEAM) if CHAMP_MY_TEAM in c2_teams else ([],[])
+
+        champ2_draft = {
+            "num":"CHAMP2","sheet":"championship2","is_champ":True,
+            "roster":champ2_roster,"teams":c2_teams,
+            "data":c2_team_data,"ranked":c2_ranked,
+            "my_rank":my_c2_rank,"my_pts":my_c2_pts,
+            "my_week_pts":my_c2_pts,"my_week_gap":round(my_c2_pts-c2_opp_pts,2),
+            "my_players":my2_st,"my_bench":my2_bn,
+            "second_team":c2_opp,"second_players":[],"second_bench":[],
+            "daily_scores":{},"my_daily":sum(p["daily"] for p in my2_st),
+            "second_today":0.0,"my_daily_gap":sum(p["daily"] for p in my2_st),
+            "my_yesterday":sum(p["yesterday"] for p in my2_st),
+            "second_yesterday":0.0,"my_yesterday_gap":sum(p["yesterday"] for p in my2_st),
+            "latest_date":latest_date,"yesterday_date":yesterday_date,
+            "champ_start":str(CHAMP_START),"champ_end":str(CHAMP_END),
+            "champ_active": CHAMP_START <= today_d2 <= CHAMP_END,
+        }
+        print(f"  Championship 2: {CHAMP_MY_TEAM} {my_c2_pts:.2f} pts (rank {my_c2_rank}/{len(c2_teams)})")
+    else:
+        print("  championship2_rosters.json not found — skipping")
+
     print("Building HTML...")
     html = pub.build_html(drafts, player_analytics, args.weeks, generated_at,
-                          champ_draft=champ_draft)
+                          champ_draft=champ_draft, champ2_draft=champ2_draft)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")

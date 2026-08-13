@@ -555,7 +555,7 @@ tr:hover td { background: #F7F9FC; }
 }
 """
 
-def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, champ_draft=None):
+def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, champ_draft=None, champ2_draft=None):
     # Show only the last 5 weeks in tables to keep them manageable
     display_weeks = list(range(max(1, num_weeks - 4), num_weeks + 1))  # e.g. wks 4-8 when on week 8
     wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in display_weeks)
@@ -645,37 +645,98 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
         today_val = _date.today()
         status    = "🟢 Active" if c_active else ("⏳ Upcoming" if today_val < _date(2026,8,10) else "✅ Complete")
 
+        # Build ownership lookup
+        c1_player_owners = {}
+        for r1, t1 in enumerate(c_ranked, 1):
+            for p1 in cd["roster"]:
+                if p1["team_name"] == t1:
+                    c1_player_owners.setdefault(p1["name"], []).append((t1, r1))
+
+        my_c1_rank_val = cd.get("my_rank") or 99
+
+        def _fmt1(v): return f"{v:.2f}"
+
+        def make_c1_player_row(p, sel_rank, my_rnk, owners_map):
+            others = [(t2,r2) for t2,r2 in owners_map.get(p["name"],[]) if t2 != p["team_name"]]
+            own_html = ""
+            for t2,r2 in sorted(others, key=lambda x:x[1]):
+                col = "red" if r2 < my_rnk else "#333"
+                own_html += "<span style=\"color:" + col + ";margin-right:4px\">" + t2 + "</span>"
+            if not own_html: own_html = "—"
+            return (
+                "<tr>"
+                "<td>" + p["name"] + "</td>"
+                "<td style=\"color:#666\">" + p["pos"] + "</td>"
+                "<td class=\"num\">" + _fmt1(p.get("total",0.0)) + "</td>"
+                "<td class=\"num\" style=\"color:#1a7a1a\">" + _fmt1(p.get("daily",0.0)) + "</td>"
+                "<td class=\"num\" style=\"color:#888\">" + _fmt1(p.get("yesterday",0.0)) + "</td>"
+                "<td style=\"font-size:10px\">" + own_html + "</td>"
+                "</tr>"
+            )
+
+        def make_c1_panel(sel_team, sel_rank, roster, team_data, owners_map, my_rnk):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in roster:
+                if p["team_name"]==sel_team and p["pos"] in by_pos:
+                    by_pos[p["pos"]].append(p)
+            st = []; bn = []
+            for pos in ["P","IF","OF"]:
+                sp = sorted(by_pos[pos], key=lambda x: x.get("total",0), reverse=True)
+                st.extend(sp[:3]); bn.extend(sp[3:])
+            st_rows = "".join(make_c1_player_row(p,sel_rank,my_rnk,owners_map) for p in st)
+            bn_rows = "".join(make_c1_player_row(p,sel_rank,my_rnk,owners_map) for p in bn)
+            team_total = (team_data.get(sel_team) or {}).get("total",0.0)
+            st_today   = sum(p.get("daily",0.0) for p in st)
+            st_yest    = sum(p.get("yesterday",0.0) for p in st)
+            st_rows += (
+                "<tr style=\"font-weight:bold;background:#f0f0f0\">"
+                "<td colspan=\"2\">Total</td>"
+                "<td class=\"num\">" + _fmt1(team_total) + "</td>"
+                "<td class=\"num\" style=\"color:#1a7a1a\">" + _fmt1(st_today) + "</td>"
+                "<td class=\"num\" style=\"color:#888\">" + _fmt1(st_yest) + "</td>"
+                "<td></td></tr>"
+            )
+            hdr_col  = "#2c7a2c" if sel_team=="EBD" else "#5a7fa8"
+            tbl_hdr  = "<thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th><th>Also Owned By</th></tr></thead>"
+            return (
+                "<div style=\"margin-bottom:8px\">"
+                "<div style=\"background:" + hdr_col + ";color:#fff;padding:4px 12px;font-size:12px;font-weight:bold\">⭐ " + sel_team + " — Starters</div>"
+                "<div class=\"tbl-scroll\"><table>" + tbl_hdr + "<tbody>" + st_rows + "</tbody></table></div>"
+                "</div>"
+                "<div style=\"border-top:2px solid #aaa\">"
+                "<div style=\"background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold\">📋 " + sel_team + " — Bench</div>"
+                "<div class=\"tbl-scroll\"><table>" + tbl_hdr + "<tbody>" + bn_rows + "</tbody></table></div>"
+                "</div>"
+            )
+
+        c1_panels = {}
+        for sel_team in c_ranked:
+            sel_rank = c_ranked.index(sel_team) + 1
+            c1_panels[sel_team] = make_c1_panel(
+                sel_team, sel_rank, cd["roster"],
+                c_data, c1_player_owners, my_c1_rank_val
+            )
+
+        ebd_c1_panel = c1_panels.get("EBD","")
+
+        import json as _json1
+        c1_panels_js = _json1.dumps(c1_panels)
+
+        # Standings rows
         c_ldr_rows = ""
         for rank, team in enumerate(c_ranked, 1):
-            total  = c_data.get(team,{}).get("total",0.0)
-            r_cls  = f"r{rank}" if rank in (1,2,3) else ""
-            me_cls = "my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
-            c_ldr_rows += f'<tr class="{r_cls} {me_cls}"><td>{rank}</td><td>{team}</td><td class="num bold">{total:.2f}</td></tr>'
-
-        def champ_starter_rows(players, tot_bg):
-            rows = ""
-            for p in players:
-                rows += f'<tr><td>{p["name"]}</td><td>{p["pos"]}</td><td class="num bold">{p["total"]:.2f}</td><td class="num" style="color:#1a7a1a">{p.get("daily",0):.2f}</td><td class="num" style="color:#888">{p.get("yesterday",0):.2f}</td></tr>'
-            tot = sum(p["total"] for p in players)
-            rows += f'<tr style="background:{tot_bg};font-weight:bold"><td colspan="2">Total</td><td class="num">{tot:.2f}</td><td></td><td></td></tr>'
-            return rows
-
-        def champ_bench_html(players):
-            rows = ""
-            for p in players:
-                rows += f'<tr style="color:#666"><td>{p["name"]}</td><td>{p["pos"]}</td><td class="num">{p["total"]:.2f}</td><td class="num" style="color:#aaa">{p.get("daily",0):.2f}</td><td class="num" style="color:#aaa">{p.get("yesterday",0):.2f}</td></tr>'
-            return rows
-
-        my_rows     = champ_starter_rows(cd["my_players"], "#d0f5d0")
-        opp_rows    = champ_starter_rows(cd["second_players"], "#dce8f5")
-        my_b_rows   = champ_bench_html(cd["my_bench"])
-        opp_b_rows  = champ_bench_html(cd["second_bench"])
-        gap         = round(cd["my_pts"] - c_data.get(cd["second_team"],{}).get("total",0.0), 2)
-        gap_col     = "#1a7a1a" if gap >= 0 else "#b00"
-        gap_sign    = "+" if gap >= 0 else ""
-        dgap_col    = "#1a7a1a" if cd["my_daily_gap"] >= 0 else "#b00"
-        dgap_sign   = "+" if cd["my_daily_gap"] >= 0 else ""
-        opp_total   = c_data.get(cd["second_team"],{}).get("total",0.0)
+            team_entry = (c_data.get(team) or {})
+            total      = team_entry.get("total", 0.0)
+            r_cls      = ("r" + str(rank)) if rank in (1,2,3) else ""
+            me_cls     = "my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
+            bold       = " style=\"font-weight:bold\"" if team=="EBD" else ""
+            c_ldr_rows += (
+                "<tr class=\"" + r_cls + " " + me_cls + "\" onclick=\"selectC1Team('" + team + "')\" style=\"cursor:pointer\">"
+                "<td>" + str(rank) + "</td>"
+                "<td" + bold + ">" + team + "</td>"
+                "<td class=\"num\">" + _fmt1(total) + "</td>"
+                "</tr>"
+            )
 
         champ_html = f"""
         <div id="championship" class="draft-card" style="border:3px solid #c8a020;margin-bottom:32px">
@@ -684,54 +745,243 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
             <span style="font-size:12px;margin-left:12px;opacity:0.85">Scoring period: {c_period}</span></div>
             <span style="font-size:13px">{status}</span>
           </div>
-          <div style="display:grid;grid-template-columns:auto 1fr;gap:0">
-            <div style="padding:12px;min-width:180px">
-              <div style="font-weight:bold;font-size:12px;margin-bottom:6px;color:#8B6914">STANDINGS</div>
-              <div class="tbl-scroll"><table>
+          <script>
+            var c1panels = {c1_panels_js};
+            function selectC1Team(team) {{
+              document.getElementById('c1panel').innerHTML = c1panels[team] || '';
+            }}
+          </script>
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:0" class="side-by-side">
+            <div style="padding:12px;border-right:2px solid #e8d080">
+              <div style="font-weight:bold;font-size:12px;margin-bottom:6px;color:#8B6914">STANDINGS — click to view roster</div>
+              <div class="tbl-scroll"><table style="width:100%">
                 <thead><tr><th>#</th><th>Team</th><th>Points</th></tr></thead>
                 <tbody>{c_ldr_rows}</tbody>
               </table></div>
             </div>
-            <div style="border-left:2px solid #e8d080;padding:12px">
-              <div style="display:flex;gap:20px;font-size:12px;margin-bottom:8px;flex-wrap:wrap">
-                <span>EBD: <strong>{cd["my_pts"]:.2f}</strong></span>
-                <span>vs {cd["second_team"]}: <strong>{opp_total:.2f}</strong></span>
-                <span>Gap: <strong style="color:{gap_col}">{gap_sign}{gap:.2f}</strong></span>
-                <span>Today gap: <strong style="color:{dgap_col}">{dgap_sign}{cd["my_daily_gap"]:.2f}</strong></span>
-              </div>
-              <div class="side-by-side" style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-                <div>
-                  <div style="background:#2c7a2c;color:#fff;padding:4px 12px;font-size:12px;font-weight:bold">⭐ EBD — Starters</div>
-                  <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
-                    <tbody>{my_rows}</tbody></table></div>
-                </div>
-                <div style="border-left:2px solid #ccc">
-                  <div style="background:#5a7fa8;color:#fff;padding:4px 12px;font-size:12px;font-weight:bold">📋 {cd["second_team"]} — Starters</div>
-                  <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
-                    <tbody>{opp_rows}</tbody></table></div>
-                </div>
-              </div>
-              <div class="side-by-side" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:2px solid #aaa;margin-top:8px">
-                <div>
-                  <div style="background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold">📋 EBD — Bench</div>
-                  <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
-                    <tbody>{my_b_rows}</tbody></table></div>
-                </div>
-                <div style="border-left:2px solid #ccc">
-                  <div style="background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold">📋 {cd["second_team"]} — Bench</div>
-                  <div class="tbl-scroll"><table>
-                    <thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th></tr></thead>
-                    <tbody>{opp_b_rows}</tbody></table></div>
-                </div>
-              </div>
+            <div id="c1panel" style="padding:12px;overflow-y:auto">
+              {ebd_c1_panel}
             </div>
           </div>
         </div>"""
 
+
     draft_cards = champ_html
+
+    # ── CHAMPIONSHIP 2 CARD ──
+    champ2_html = ""
+    if champ2_draft:
+        cd2       = champ2_draft
+        c2_period = f"{cd2.get('champ_start','Aug 10')} to {cd2.get('champ_end','Aug 23')}"
+        c2_active = cd2.get("champ_active", False)
+        from datetime import date as _date2
+        today2    = _date2.today()
+        status2   = "🟢 Active" if c2_active else ("⏳ Upcoming" if today2 < _date2(2026,8,10) else "✅ Complete")
+
+        # Full leaderboard - all 12 teams with expandable rosters
+        # Build roster lookup for all teams
+        def build_team_roster_html(team_name):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in cd2["roster"]:
+                if p["team_name"]!=team_name or p["pos"] not in by_pos: continue
+                score = cd2["data"].get(team_name,{}).get("total",0.0)  # placeholder
+                by_pos[p["pos"]].append(p)
+            # Find starters (top 3 per pos by total)
+            all_p = []
+            for p in cd2["roster"]:
+                if p["team_name"]!=team_name: continue
+                # Get score from my_players/second_players or compute via name match
+                found = next((x for x in (cd2.get("all_player_scores",{}) or {}).items() if x[0]==p["name"]), None)
+                all_p.append(p)
+            rows = "".join(f'<tr><td>{p["name"]}</td><td>{p["pos"]}</td><td>{p["mlb"]}</td></tr>' for p in all_p)
+            return f'<table style="font-size:11px;width:100%"><thead><tr><th>Player</th><th>Pos</th><th>MLB</th></tr></thead><tbody>{rows}</tbody></table>'
+
+        # Build player ownership lookup: name -> list of (team, rank)
+        c2_player_owners = {}
+        for r2, t2 in enumerate(cd2["ranked"], 1):
+            for p2 in cd2["roster"]:
+                if p2["team_name"] == t2:
+                    nm = p2["name"]
+                    c2_player_owners.setdefault(nm, []).append((t2, r2))
+
+        c2_ldr_rows = ""
+        for rank, team in enumerate(cd2["ranked"], 1):
+            team_entry   = cd2["data"].get(team) or {}
+            total        = team_entry.get("total", 0.0)
+            r_cls        = ("r" + str(rank)) if rank in (1,2,3) else ""
+            me_cls       = "my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
+            tid          = "c2t" + str(rank)
+            team_players = [p for p in cd2["roster"] if p["team_name"]==team]
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in team_players:
+                if p["pos"] in by_pos: by_pos[p["pos"]].append(p)
+
+            roster_rows = ""
+            for pos in ["P","IF","OF"]:
+                for p in by_pos[pos]:
+                    others = [(t2,r2) for t2,r2 in c2_player_owners.get(p["name"],[]) if t2 != team]
+                    own_html = ""
+                    for t2,r2 in sorted(others, key=lambda x:x[1]):
+                        col = "red" if r2 < rank else "#333"
+                        own_html += "<span style='color:" + col + ";margin-right:4px'>" + t2 + "</span>"
+                    roster_rows += (
+                        "<tr style='border-top:1px solid #eee'>"
+                        "<td style='padding:2px 8px'>" + p["name"] + "</td>"
+                        "<td style='padding:2px 4px;color:#666'>" + p["pos"] + "</td>"
+                        "<td style='padding:2px 4px;color:#666'>" + p["mlb"] + "</td>"
+                        "<td style='padding:2px 8px;font-size:10px'>" + own_html + "</td>"
+                        "</tr>"
+                    )
+
+            roster_html = (
+                "<tr id='" + tid + "' style='display:none'>"
+                "<td colspan='3' style='padding:0;background:#f5f5f5'>"
+                "<table style='width:100%;font-size:11px;border-collapse:collapse'>"
+                "<thead><tr style='background:#ddd'>"
+                "<th style='padding:3px 8px;text-align:left'>Player</th>"
+                "<th style='padding:3px 4px;text-align:left'>Pos</th>"
+                "<th style='padding:3px 4px;text-align:left'>MLB</th>"
+                "<th style='padding:3px 8px;text-align:left'>Also Owned By</th>"
+                "</tr></thead>"
+                "<tbody>" + roster_rows + "</tbody>"
+                "</table></td></tr>"
+            )
+
+            ldr_row = (
+                "<tr class='" + r_cls + " " + me_cls + "'"
+                " style='cursor:pointer'"
+                " onclick='var e=document.getElementById(&quot;" + tid + "&quot;);"
+                "var a=document.getElementById(&quot;arr" + tid + "&quot;);"
+                "if(e.style.display==&quot;none&quot;||e.style.display==&quot;&quot;)"
+                "{e.style.display=&quot;table-row&quot;;if(a)a.innerHTML=&quot;&#9660;&quot;;}"
+                "else{e.style.display=&quot;none&quot;;if(a)a.innerHTML=&quot;&#9654;&quot;;}'"
+                ">"
+                "<td>" + str(rank) + "</td>"
+                "<td>" + team + " <span id='arr" + tid + "'>&#9654;</span></td>"
+                "<td class='num' style='font-weight:bold'>" + f"{total:.2f}" + "</td>"
+                "</tr>"
+            )
+            c2_ldr_rows += ldr_row + roster_html
+
+        # Build all-team player data for JS-driven panel
+        def _fmt(v):
+            return f"{v:.2f}"
+
+        def make_c2_player_row(p, sel_rank, my_rnk, owners_map):
+            team_nm = p["team_name"]
+            others  = [(t2,r2) for t2,r2 in owners_map.get(p["name"],[]) if t2 != team_nm]
+            own_html = ""
+            for t2,r2 in sorted(others, key=lambda x:x[1]):
+                col = "red" if r2 < my_rnk else "#333"
+                own_html += "<span style=\"color:" + col + ";margin-right:4px\">" + t2 + "</span>"
+            if not own_html: own_html = "—"
+            tot = _fmt(p.get("total",0.0))
+            day = _fmt(p.get("daily",0.0))
+            yst = _fmt(p.get("yesterday",0.0))
+            return (
+                "<tr>"
+                "<td>" + p["name"] + "</td>"
+                "<td style=\"color:#666\">" + p["pos"] + "</td>"
+                "<td class=\"num\">" + tot + "</td>"
+                "<td class=\"num\" style=\"color:#1a7a1a\">" + day + "</td>"
+                "<td class=\"num\" style=\"color:#888\">" + yst + "</td>"
+                "<td style=\"font-size:10px\">" + own_html + "</td>"
+                "</tr>"
+            )
+
+        def make_c2_panel(sel_team, sel_rank, roster, team_data, owners_map, my_rnk):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in roster:
+                if p["team_name"]==sel_team and p["pos"] in by_pos:
+                    by_pos[p["pos"]].append(p)
+            st = []; bn = []
+            for pos in ["P","IF","OF"]:
+                sp = sorted(by_pos[pos], key=lambda x: x.get("total",0), reverse=True)
+                st.extend(sp[:3]); bn.extend(sp[3:])
+            st_rows = "".join(make_c2_player_row(p,sel_rank,my_rnk,owners_map) for p in st)
+            bn_rows = "".join(make_c2_player_row(p,sel_rank,my_rnk,owners_map) for p in bn)
+            team_total = (team_data.get(sel_team) or {}).get("total",0.0)
+            st_today = sum(p.get("daily",0.0) for p in st)
+            st_yest  = sum(p.get("yesterday",0.0) for p in st)
+            st_rows += (
+                "<tr style=\"font-weight:bold;background:#f0f0f0\">"
+                "<td colspan=\"2\">Total</td>"
+                "<td class=\"num\">" + _fmt(team_total) + "</td>"
+                "<td class=\"num\" style=\"color:#1a7a1a\">" + _fmt(st_today) + "</td>"
+                "<td class=\"num\" style=\"color:#888\">" + _fmt(st_yest) + "</td>"
+                "<td></td></tr>"
+            )
+            hdr_col  = "#2c7a2c" if sel_team=="EBD" else "#5a7fa8"
+            tbl_hdr  = "<thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th><th>Also Owned By</th></tr></thead>"
+            return (
+                "<div style=\"margin-bottom:8px\">"
+                "<div style=\"background:" + hdr_col + ";color:#fff;padding:4px 12px;font-size:12px;font-weight:bold\">⭐ " + sel_team + " — Starters</div>"
+                "<div class=\"tbl-scroll\"><table>" + tbl_hdr + "<tbody>" + st_rows + "</tbody></table></div>"
+                "</div>"
+                "<div style=\"border-top:2px solid #aaa\">"
+                "<div style=\"background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold\">📋 " + sel_team + " — Bench</div>"
+                "<div class=\"tbl-scroll\"><table>" + tbl_hdr + "<tbody>" + bn_rows + "</tbody></table></div>"
+                "</div>"
+            )
+
+        my_c2_rank_val = cd2.get("my_rank") or 99
+        c2_panels = {}
+        for sel_team in cd2["ranked"]:
+            sel_rank = cd2["ranked"].index(sel_team) + 1
+            c2_panels[sel_team] = make_c2_panel(
+                sel_team, sel_rank, cd2["roster"],
+                cd2["data"], c2_player_owners, my_c2_rank_val
+            )
+
+        ebd_panel_html = c2_panels.get("EBD","")
+
+        import json as _json
+        c2_panels_js = _json.dumps(c2_panels)
+
+        # Build standings rows
+        c2_ldr_rows = ""
+        for rank, team in enumerate(cd2["ranked"], 1):
+            team_entry = (cd2["data"].get(team) or {})
+            total      = team_entry.get("total", 0.0)
+            r_cls      = ("r" + str(rank)) if rank in (1,2,3) else ""
+            me_cls     = "my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
+            bold       = " style=\"font-weight:bold\"" if team=="EBD" else ""
+            c2_ldr_rows += (
+                "<tr class=\"" + r_cls + " " + me_cls + "\" onclick=\"selectC2Team('" + team + "')\" style=\"cursor:pointer\">"
+                "<td>" + str(rank) + "</td>"
+                "<td" + bold + ">" + team + "</td>"
+                "<td class=\"num\">" + _fmt(total) + "</td>"
+                "</tr>"
+            )
+
+        champ2_html = f"""
+        <div id="championship2" class="draft-card" style="border:3px solid #1a5c8a;margin-bottom:32px">
+          <div style="background:linear-gradient(135deg,#0d2d4a,#1a5c8a);color:#7ec8e3;padding:12px 20px;display:flex;justify-content:space-between;align-items:center">
+            <div><span style="font-size:20px;font-weight:bold">🏆 CHAMPIONSHIP 2</span>
+            <span style="font-size:12px;margin-left:12px;opacity:0.85">Scoring period: {c2_period}</span></div>
+            <span style="font-size:13px">{status2}</span>
+          </div>
+          <script>
+            var c2panels = {c2_panels_js};
+            function selectC2Team(team) {{
+              document.getElementById('c2panel').innerHTML = c2panels[team] || '';
+            }}
+          </script>
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:0" class="side-by-side">
+            <div style="padding:12px;border-right:2px solid #7ec8e3">
+              <div style="font-weight:bold;font-size:12px;margin-bottom:6px;color:#1a5c8a">STANDINGS — click to view roster</div>
+              <div class="tbl-scroll"><table style="width:100%">
+                <thead><tr><th>#</th><th>Team</th><th>Points</th></tr></thead>
+                <tbody>{c2_ldr_rows}</tbody>
+              </table></div>
+            </div>
+            <div id="c2panel" style="padding:12px;overflow-y:auto">
+              {ebd_panel_html}
+            </div>
+          </div>
+        </div>"""
+    draft_cards = champ_html + champ2_html
+
     for d in drafts:
         # Leaderboard rows
         ldr_rows = ""
@@ -912,8 +1162,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
     # ── FULL PAGE ──
     # ── NAV ──
     champ_nav  = '<a href="#championship" style="color:#FFD700;font-weight:bold">🏆 Champ</a>' if champ_draft else ''
+    champ2_nav = '<a href="#championship2" style="color:#7ec8e3;font-weight:bold">🏆 Champ 2</a>' if champ2_draft else ''
     nav_links  = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
-    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#analytics">Summary</a>{champ_nav}{nav_links}</nav>'
+    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#analytics">Summary</a>{champ_nav}{champ2_nav}{nav_links}</nav>'
 
     pills = f"""
     <div class="pills">
@@ -1277,6 +1528,18 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
 </div>
 <script>
 // Tab switching
+function toggleC2(rank) {{
+  var row = document.getElementById("c2team_" + rank);
+  var arr = document.getElementById("arrc2team_" + rank);
+  if (!row) return;
+  if (row.style.display === "none" || row.style.display === "") {{
+    row.style.display = "table-row";
+    if (arr) arr.innerHTML = "&#9660;";
+  }} else {{
+    row.style.display = "none";
+    if (arr) arr.innerHTML = "&#9654;";
+  }}
+}}
 function showAnalyticsTab(pos, btn) {{
   document.querySelectorAll('.atab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
