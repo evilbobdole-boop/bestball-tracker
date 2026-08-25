@@ -1084,7 +1084,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
             </div>
           </div>
         </div>"""
-    draft_cards = champ_html + champ2_html + semis_html
+    draft_cards = semis_html + champ_html + champ2_html
 
     for d in drafts:
         # Leaderboard rows
