@@ -14,9 +14,13 @@ from pathlib import Path
 
 MY_TEAM       = "evilbobdole"
 CHAMP_MY_TEAM      = "EBD"
-CHAMP_START        = date(2026, 8, 10)
-CHAMP_END          = date(2026, 8, 23)
-STATS_FREEZE_DATE  = date(2026, 8, 9)  # Never re-fetch stats before this date
+CHAMP_START        = date(2026, 8, 24)  # Championship 1 new scoring period
+CHAMP_END          = date(2026, 9, 6)
+CHAMP2_START       = date(2026, 8, 10)  # Championship 2 scoring period
+SEMIS_START        = date(2026, 8, 24)  # Semifinals scoring period
+SEMIS_END          = date(2026, 9, 6)
+CHAMP2_END         = date(2026, 8, 23)
+STATS_FREEZE_DATE  = date(2026, 8, 23)  # Never re-fetch stats before this date
 SEASON_START = date(2026, 3, 25)
 WEEK1_END    = date(2026, 4, 5)   # Week 1: Mar 25 - Apr 5
 API          = "https://statsapi.mlb.com/api/v1"
@@ -347,6 +351,18 @@ def is_champ_date(d_str):
         return CHAMP_START <= d <= CHAMP_END
     except: return False
 
+def is_champ2_date(d_str):
+    try:
+        d = date.fromisoformat(str(d_str)[:10])
+        return CHAMP2_START <= d <= CHAMP2_END
+    except: return False
+
+def is_semis_date(d_str):
+    try:
+        d = date.fromisoformat(str(d_str)[:10])
+        return SEMIS_START <= d <= SEMIS_END
+    except: return False
+
 def champ_player_score_ci(name, mlb, pos, batting, pitching):
     """Match on name only — handles mid-season trades where team may have changed."""
     name_s = strip_accents(str(name).strip())
@@ -607,7 +623,7 @@ def main():
             _src = pitching if _p["pos"]=="P" else batting
             _srd = batting_daily  if _p["pos"]!="P" else pitching_daily
             _sry = batting_yest   if _p["pos"]!="P" else pitching_yest
-            _tot = round(sum(v for k,v in _src.items() if is_champ_date(k[0]) and k[1]==_ns), 2)
+            _tot = round(sum(v for k,v in _src.items() if is_champ2_date(k[0]) and k[1]==_ns), 2)
             _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
             _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
             champ2_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
@@ -668,9 +684,77 @@ def main():
     else:
         print("  championship2_rosters.json not found — skipping")
 
+    # ── SEMIFINALS ────────────────────────────────────────────────────────────
+    semis_draft    = None
+    semis_ros_path = Path("semifinals_rosters.json")
+    if semis_ros_path.exists():
+        semis_data   = json.loads(semis_ros_path.read_text())
+        semis_roster_raw = semis_data.get("semifinals", [])
+        semis_roster = []
+        for _p in semis_roster_raw:
+            _ns  = strip_accents(str(_p["name"]).strip())
+            _src = pitching if _p["pos"]=="P" else batting
+            _srd = batting_daily  if _p["pos"]!="P" else pitching_daily
+            _sry = batting_yest   if _p["pos"]!="P" else pitching_yest
+            _tot = round(sum(v for k,v in _src.items() if is_semis_date(k[0]) and k[1]==_ns), 2)
+            _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
+            _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
+            semis_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
+
+        s_teams = list(dict.fromkeys(p["team_name"] for p in semis_roster))
+        s_team_data = {}
+        for team in s_teams:
+            by_pos={"P":[],"IF":[],"OF":[]}
+            for p in semis_roster:
+                if p["team_name"]!=team or p["pos"] not in by_pos: continue
+                by_pos[p["pos"]].append(p.get("total",0.0))
+            total=sum(sum(sorted(s,reverse=True)[:3]) for s in by_pos.values())
+            s_team_data[team]={"total":round(total,2)}
+
+        s_ranked  = sorted(s_teams,key=lambda t:s_team_data[t]["total"],reverse=True)
+        my_s_rank = s_ranked.index(CHAMP_MY_TEAM)+1 if CHAMP_MY_TEAM in s_ranked else None
+        my_s_pts  = s_team_data.get(CHAMP_MY_TEAM,{}).get("total",0.0)
+        s_opp_idx = 2 if (my_s_rank and my_s_rank<=2) else 1
+        s_opp     = s_ranked[s_opp_idx] if len(s_ranked)>s_opp_idx else None
+        s_opp_pts = s_team_data.get(s_opp or "",{}).get("total",0.0)
+
+        def build_semis_team_ci(team_name):
+            by_pos={"P":[],"IF":[],"OF":[]}
+            for p in semis_roster:
+                if p["team_name"]!=team_name or p["pos"] not in by_pos: continue
+                by_pos[p["pos"]].append(p)
+            st=[]; bn=[]
+            for pos in ["P","IF","OF"]:
+                s=sorted(by_pos[pos],key=lambda x:x.get("total",0),reverse=True)
+                st.extend(s[:3]); bn.extend(s[3:])
+            return st, bn
+
+        my_s_st,my_s_bn = build_semis_team_ci(CHAMP_MY_TEAM) if CHAMP_MY_TEAM in s_teams else ([],[])
+        today_ds = datetime.utcnow().date()
+        semis_draft = {
+            "num":"SEMIS","sheet":"semifinals","is_champ":True,
+            "roster":semis_roster,"teams":s_teams,
+            "data":s_team_data,"ranked":s_ranked,
+            "my_rank":my_s_rank,"my_pts":my_s_pts,
+            "my_week_pts":my_s_pts,"my_week_gap":round(my_s_pts-s_opp_pts,2),
+            "my_players":my_s_st,"my_bench":my_s_bn,
+            "second_team":s_opp,"second_players":[],"second_bench":[],
+            "daily_scores":{},"my_daily":sum(p.get("daily",0) for p in my_s_st),
+            "second_today":0.0,"my_daily_gap":sum(p.get("daily",0) for p in my_s_st),
+            "my_yesterday":sum(p.get("yesterday",0) for p in my_s_st),
+            "second_yesterday":0.0,"my_yesterday_gap":sum(p.get("yesterday",0) for p in my_s_st),
+            "latest_date":latest_date,"yesterday_date":yesterday_date,
+            "champ_start":str(SEMIS_START),"champ_end":str(SEMIS_END),
+            "champ_active": SEMIS_START <= today_ds <= SEMIS_END,
+        }
+        print(f"  Semifinals: {CHAMP_MY_TEAM} {my_s_pts:.2f} pts (rank {my_s_rank}/{len(s_teams)})")
+    else:
+        print("  semifinals_rosters.json not found — skipping")
+
     print("Building HTML...")
     html = pub.build_html(drafts, player_analytics, args.weeks, generated_at,
-                          champ_draft=champ_draft, champ2_draft=champ2_draft)
+                          champ_draft=champ_draft, champ2_draft=champ2_draft,
+                          semis_draft=semis_draft)
 
     out = Path("index.html")
     out.write_text(html, encoding="utf-8")

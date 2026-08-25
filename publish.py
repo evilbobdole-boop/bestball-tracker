@@ -555,7 +555,7 @@ tr:hover td { background: #F7F9FC; }
 }
 """
 
-def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, champ_draft=None, champ2_draft=None):
+def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, champ_draft=None, champ2_draft=None, semis_draft=None):
     # Show only the last 5 weeks in tables to keep them manageable
     display_weeks = list(range(max(1, num_weeks - 4), num_weeks + 1))  # e.g. wks 4-8 when on week 8
     wk_hdrs     = "".join(f"<th>Wk {w}</th>" for w in display_weeks)
@@ -643,7 +643,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
         c_period  = f"{cd.get('champ_start','Aug 10')} to {cd.get('champ_end','Aug 23')}"
         c_active  = cd.get("champ_active", False)
         today_val = _date.today()
-        status    = "🟢 Active" if c_active else ("⏳ Upcoming" if today_val < _date(2026,8,10) else "✅ Complete")
+        status    = "🟢 Active" if c_active else ("⏳ Upcoming" if today_val < _date(2026,8,24) else "✅ Complete")
 
         # Build ownership lookup
         c1_player_owners = {}
@@ -765,6 +765,110 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
           </div>
         </div>"""
 
+
+    # ── SEMIFINALS CARD ──
+    semis_html = ""
+    if semis_draft:
+        sd         = semis_draft
+        s_period   = f"{sd.get('champ_start','Aug 24')} to {sd.get('champ_end','Sep 6')}"
+        s_active   = sd.get("champ_active", False)
+        from datetime import date as _sddate
+        s_status   = "🟢 Active" if s_active else ("⏳ Upcoming" if _sddate.today() < _sddate(2026,8,24) else "✅ Complete")
+
+        # Ownership lookup
+        s_owners = {}
+        for r1,t1 in enumerate(sd["ranked"],1):
+            for p1 in sd["roster"]:
+                if p1["team_name"]==t1:
+                    s_owners.setdefault(p1["name"],[]).append((t1,r1))
+
+        my_s_rank_val = sd.get("my_rank") or 99
+
+        def _sfmt(v): return f"{v:.2f}"
+
+        def make_s_player_row(p, sel_rank, my_rnk, owners_map):
+            others = [(t2,r2) for t2,r2 in owners_map.get(p["name"],[]) if t2!=p["team_name"]]
+            own_html = ""
+            for t2,r2 in sorted(others,key=lambda x:x[1]):
+                col = "red" if r2<my_rnk else "#333"
+                own_html += "<span style=\"color:"+col+";margin-right:4px\">"+t2+"</span>"
+            if not own_html: own_html="—"
+            return ("<tr><td>"+p["name"]+"</td><td style=\"color:#666\">"+p["pos"]+"</td>"
+                    "<td class=\"num\">"+_sfmt(p.get("total",0))+"</td>"
+                    "<td class=\"num\" style=\"color:#1a7a1a\">"+_sfmt(p.get("daily",0))+"</td>"
+                    "<td class=\"num\" style=\"color:#888\">"+_sfmt(p.get("yesterday",0))+"</td>"
+                    "<td style=\"font-size:10px\">"+own_html+"</td></tr>")
+
+        def make_s_panel(sel_team, sel_rank, roster, team_data, owners_map, my_rnk):
+            by_pos={"P":[],"IF":[],"OF":[]}
+            for p in roster:
+                if p["team_name"]==sel_team and p["pos"] in by_pos: by_pos[p["pos"]].append(p)
+            st=[]; bn=[]
+            for pos in ["P","IF","OF"]:
+                sp=sorted(by_pos[pos],key=lambda x:x.get("total",0),reverse=True)
+                st.extend(sp[:3]); bn.extend(sp[3:])
+            st_rows="".join(make_s_player_row(p,sel_rank,my_rnk,owners_map) for p in st)
+            bn_rows="".join(make_s_player_row(p,sel_rank,my_rnk,owners_map) for p in bn)
+            t_total=(team_data.get(sel_team) or {}).get("total",0.0)
+            st_today=sum(p.get("daily",0) for p in st)
+            st_yest=sum(p.get("yesterday",0) for p in st)
+            st_rows+=("<tr style=\"font-weight:bold;background:#f0f0f0\"><td colspan=\"2\">Total</td>"
+                      "<td class=\"num\">"+_sfmt(t_total)+"</td>"
+                      "<td class=\"num\" style=\"color:#1a7a1a\">"+_sfmt(st_today)+"</td>"
+                      "<td class=\"num\" style=\"color:#888\">"+_sfmt(st_yest)+"</td><td></td></tr>")
+            hdr=("#2c7a2c" if sel_team=="EBD" else "#5a7fa8")
+            tbl="<thead><tr><th>Player</th><th>Pos</th><th>Period</th><th>Today</th><th>Yest</th><th>Also Owned By</th></tr></thead>"
+            return ("<div style=\"margin-bottom:8px\"><div style=\"background:"+hdr+";color:#fff;padding:4px 12px;font-size:12px;font-weight:bold\">⭐ "+sel_team+" — Starters</div>"
+                    "<div class=\"tbl-scroll\"><table>"+tbl+"<tbody>"+st_rows+"</tbody></table></div></div>"
+                    "<div style=\"border-top:2px solid #aaa\"><div style=\"background:#888;color:#fff;padding:4px 12px;font-size:11px;font-weight:bold\">📋 "+sel_team+" — Bench</div>"
+                    "<div class=\"tbl-scroll\"><table>"+tbl+"<tbody>"+bn_rows+"</tbody></table></div></div>")
+
+        s_panels={}
+        for sel_team in sd["ranked"]:
+            sel_rank=sd["ranked"].index(sel_team)+1
+            s_panels[sel_team]=make_s_panel(sel_team,sel_rank,sd["roster"],sd["data"],s_owners,my_s_rank_val)
+
+        ebd_s_panel=s_panels.get("EBD","")
+        import json as _sjson
+        s_panels_js=_sjson.dumps(s_panels)
+
+        s_ldr_rows=""
+        for rank,team in enumerate(sd["ranked"],1):
+            te=(sd["data"].get(team) or {})
+            total=te.get("total",0.0)
+            r_cls=("r"+str(rank)) if rank in (1,2,3) else ""
+            me_cls="my-row-top2" if team=="EBD" and rank<=2 else ("my-row" if team=="EBD" else "")
+            bold=" style=\"font-weight:bold\"" if team=="EBD" else ""
+            s_ldr_rows+=("<tr class=\""+r_cls+" "+me_cls+"\" onclick=\"selectSemisTeam('"+team+"')\" style=\"cursor:pointer\">"
+                         "<td>"+str(rank)+"</td><td"+bold+">"+team+"</td>"
+                         "<td class=\"num\">"+_sfmt(total)+"</td></tr>")
+
+        semis_html = f"""
+        <div id="semifinals" class="draft-card" style="border:3px solid #ffa500;margin-bottom:32px">
+          <div style="background:linear-gradient(135deg,#4a2800,#b36b00);color:#ffd280;padding:12px 20px;display:flex;justify-content:space-between;align-items:center">
+            <div><span style="font-size:20px;font-weight:bold">🥈 SEMIFINALS</span>
+            <span style="font-size:12px;margin-left:12px;opacity:0.85">Scoring period: {s_period}</span></div>
+            <span style="font-size:13px">{s_status}</span>
+          </div>
+          <script>
+            var spannels = {s_panels_js};
+            function selectSemisTeam(team) {{
+              document.getElementById('spanel').innerHTML = spannels[team] || '';
+            }}
+          </script>
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:0" class="side-by-side">
+            <div style="padding:12px;border-right:2px solid #ffa500">
+              <div style="font-weight:bold;font-size:12px;margin-bottom:6px;color:#b36b00">STANDINGS — click to view roster</div>
+              <div class="tbl-scroll"><table style="width:100%">
+                <thead><tr><th>#</th><th>Team</th><th>Points</th></tr></thead>
+                <tbody>{s_ldr_rows}</tbody>
+              </table></div>
+            </div>
+            <div id="spanel" style="padding:12px;overflow-y:auto">
+              {ebd_s_panel}
+            </div>
+          </div>
+        </div>"""
 
     draft_cards = champ_html
 
@@ -980,7 +1084,7 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
             </div>
           </div>
         </div>"""
-    draft_cards = champ_html + champ2_html
+    draft_cards = champ_html + champ2_html + semis_html
 
     for d in drafts:
         # Leaderboard rows
@@ -1163,8 +1267,9 @@ def build_html(drafts, player_analytics, num_weeks, generated_at, xlsx=None, cha
     # ── NAV ──
     champ_nav  = '<a href="#championship" style="color:#FFD700;font-weight:bold">🏆 Champ</a>' if champ_draft else ''
     champ2_nav = '<a href="#championship2" style="color:#7ec8e3;font-weight:bold">🏆 Champ 2</a>' if champ2_draft else ''
+    semis_nav  = '<a href="#semifinals" style="color:#ffa500;font-weight:bold">🥈 Semis</a>' if semis_draft else ''
     nav_links  = "".join(f'<a href="#d{d["num"]}">D{d["num"]}</a>' for d in drafts)
-    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#analytics">Summary</a>{champ_nav}{champ2_nav}{nav_links}</nav>'
+    nav = f'<nav><span class="brand">⚾ Best Ball $600K</span><a href="#analytics">Summary</a>{champ_nav}{champ2_nav}{semis_nav}{nav_links}</nav>'
 
     pills = f"""
     <div class="pills">

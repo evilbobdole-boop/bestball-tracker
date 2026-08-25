@@ -16,9 +16,14 @@ TRACKER_DIR  = Path(r"C:\Users\EvilBobFUCKINGDole\Downloads\BEST BALL 2026\bestb
 ROSTERS_FILE       = TRACKER_DIR / "rosters.json"
 CHAMP_ROSTERS_FILE  = TRACKER_DIR / "championship_rosters.json"
 CHAMP2_ROSTERS_FILE = TRACKER_DIR / "championship2_rosters.json"
-CHAMP_START        = date(2026, 8, 10)
-CHAMP_END          = date(2026, 8, 23)
-STATS_FREEZE_DATE  = date(2026, 8, 9)  # Never re-fetch stats before this date
+SEMIS_ROSTERS_FILE  = TRACKER_DIR / "semifinals_rosters.json"
+CHAMP_START        = date(2026, 8, 24)  # Championship 1 new scoring period
+CHAMP_END          = date(2026, 9, 6)
+CHAMP2_START       = date(2026, 8, 10)  # Championship 2 scoring period
+CHAMP2_END         = date(2026, 8, 23)
+SEMIS_START        = date(2026, 8, 24)  # Semifinals scoring period
+SEMIS_END          = date(2026, 9, 6)
+STATS_FREEZE_DATE  = date(2026, 8, 23)  # Never re-fetch stats before this date
 CHAMP_MY_TEAM      = "EBD"
 DRAFT16_NUM        = 16  # Only calculate this regular draft alongside championship
 CACHE_FILE   = TRACKER_DIR / "stats_cache.json"
@@ -57,6 +62,18 @@ def is_champ_date(d_str):
     try:
         d = date.fromisoformat(str(d_str)[:10])
         return CHAMP_START <= d <= CHAMP_END
+    except: return False
+
+def is_champ2_date(d_str):
+    try:
+        d = date.fromisoformat(str(d_str)[:10])
+        return CHAMP2_START <= d <= CHAMP2_END
+    except: return False
+
+def is_semis_date(d_str):
+    try:
+        d = date.fromisoformat(str(d_str)[:10])
+        return SEMIS_START <= d <= SEMIS_END
     except: return False
 
 def champ_player_score(name, mlb, pos, batting, pitching):
@@ -529,6 +546,74 @@ def main():
         }
         print(f"  Championship: {CHAMP_MY_TEAM} {my_champ_pts:.2f} pts (rank {my_champ_rank})")
 
+    # ── SEMIFINALS ───────────────────────────────────────────────────────────
+    semis_draft = None
+    semis_rosters = {}
+    if SEMIS_ROSTERS_FILE.exists():
+        semis_rosters = json.loads(SEMIS_ROSTERS_FILE.read_text())
+        print(f"  Semifinals rosters loaded: {len(semis_rosters.get('semifinals', []))} players")
+
+    semis_roster_raw = semis_rosters.get("semifinals", [])
+    semis_roster = []
+    for _p in semis_roster_raw:
+        _ns  = strip_accents(str(_p["name"]).strip())
+        _src = pitching if _p["pos"]=="P" else batting
+        _srd = pitching_daily if _p["pos"]=="P" else batting_daily
+        _sry = pitching_yest  if _p["pos"]=="P" else batting_yest
+        _tot = round(sum(v for k,v in _src.items() if is_semis_date(k[0]) and k[1]==_ns), 2)
+        _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
+        _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
+        semis_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
+
+    if semis_roster:
+        s_teams = list(dict.fromkeys(p["team_name"] for p in semis_roster))
+        s_team_data = {}
+        for team in s_teams:
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in semis_roster:
+                if p["team_name"]!=team or p["pos"] not in by_pos: continue
+                by_pos[p["pos"]].append(p.get("total",0.0))
+            total = sum(sum(sorted(s,reverse=True)[:3]) for s in by_pos.values())
+            s_team_data[team] = {"total": round(total,2)}
+
+        s_ranked   = sorted(s_teams, key=lambda t: s_team_data[t]["total"], reverse=True)
+        my_s_rank  = s_ranked.index(CHAMP_MY_TEAM)+1 if CHAMP_MY_TEAM in s_ranked else None
+        my_s_pts   = s_team_data.get(CHAMP_MY_TEAM,{}).get("total",0.0)
+        s_opp_idx  = 2 if (my_s_rank and my_s_rank<=2) else 1
+        s_opp      = s_ranked[s_opp_idx] if len(s_ranked)>s_opp_idx else None
+        s_opp_pts  = s_team_data.get(s_opp or "",{}).get("total",0.0)
+
+        def build_semis_team(team_name):
+            by_pos = {"P":[],"IF":[],"OF":[]}
+            for p in semis_roster:
+                if p["team_name"]!=team_name or p["pos"] not in by_pos: continue
+                by_pos[p["pos"]].append(p)
+            starters=[]; bench=[]
+            for pos in ["P","IF","OF"]:
+                s = sorted(by_pos[pos],key=lambda x:x.get("total",0),reverse=True)
+                starters.extend(s[:3]); bench.extend(s[3:])
+            return starters, bench
+
+        my_s_st, my_s_bn = build_semis_team(CHAMP_MY_TEAM) if CHAMP_MY_TEAM in s_teams else ([],[])
+
+        semis_draft = {
+            "num":"SEMIS","sheet":"semifinals","is_champ":True,
+            "roster":semis_roster,"teams":s_teams,
+            "data":s_team_data,"ranked":s_ranked,
+            "my_rank":my_s_rank,"my_pts":my_s_pts,
+            "my_week_pts":my_s_pts,"my_week_gap":round(my_s_pts-s_opp_pts,2),
+            "my_players":my_s_st,"my_bench":my_s_bn,
+            "second_team":s_opp,"second_players":[],"second_bench":[],
+            "daily_scores":{},"my_daily":sum(p.get("daily",0) for p in my_s_st),
+            "second_today":0.0,"my_daily_gap":sum(p.get("daily",0) for p in my_s_st),
+            "my_yesterday":sum(p.get("yesterday",0) for p in my_s_st),
+            "second_yesterday":0.0,"my_yesterday_gap":sum(p.get("yesterday",0) for p in my_s_st),
+            "latest_date":latest_date,"yesterday_date":yesterday_date,
+            "champ_start":str(SEMIS_START),"champ_end":str(SEMIS_END),
+            "champ_active": SEMIS_START <= est_now().date() <= SEMIS_END,
+        }
+        print(f"  Semifinals: {CHAMP_MY_TEAM} {my_s_pts:.2f} pts (rank {my_s_rank}/{len(s_teams)})")
+
     # ── CHAMPIONSHIP 2 ────────────────────────────────────────────────────────
     champ2_roster_raw = champ2_rosters.get("championship2", [])
     # Pre-score all championship2 players before building panels
@@ -538,7 +623,7 @@ def main():
         _src = pitching if _p["pos"]=="P" else batting
         _srd = pitching_daily if _p["pos"]=="P" else batting_daily
         _sry = pitching_yest  if _p["pos"]=="P" else batting_yest
-        _tot = round(sum(v for k,v in _src.items() if is_champ_date(k[0]) and k[1]==_ns), 2)
+        _tot = round(sum(v for k,v in _src.items() if is_champ2_date(k[0]) and k[1]==_ns), 2)
         _day = round(sum(v for k,v in _srd.items() if k[0]==latest_date    and k[1]==_ns), 2) if latest_date    else 0.0
         _yst = round(sum(v for k,v in _sry.items() if k[0]==yesterday_date and k[1]==_ns), 2) if yesterday_date else 0.0
         champ2_roster.append({**_p, "total":_tot, "daily":_day, "yesterday":_yst})
@@ -637,7 +722,8 @@ def main():
 
     print("Building HTML...")
     html = pub.build_html(drafts, player_analytics, num_weeks, generated_at,
-                          xlsx=TRACKER_DIR, champ_draft=champ_draft, champ2_draft=champ2_draft)
+                          xlsx=TRACKER_DIR, champ_draft=champ_draft, champ2_draft=champ2_draft,
+                          semis_draft=semis_draft)
     OUTPUT_FILE.write_text(html, encoding="utf-8")
     print(f"✓ Written: {OUTPUT_FILE} ({len(html):,} bytes)")
 
